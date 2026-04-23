@@ -3,7 +3,7 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react"
 import { FirebaseError } from "firebase/app"
 import { onAuthStateChanged, signOut, type User } from "firebase/auth"
-import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore"
+import { deleteDoc, doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore"
 import { useRouter } from "next/navigation"
 
 import { AppShell } from "@/components/app-shell"
@@ -331,6 +331,7 @@ export function HomePanel() {
           if (!snapshot.exists()) return
           const data = snapshot.data() as Partial<TaskDayDoc>
           const dayTasks = Array.isArray(data.tasks) ? data.tasks : []
+          if (dayTasks.length === 0) return
           const minutes = dayTasks.reduce(
             (sum, task) => sum + (Number(task.durationMinutes) || 0),
             0
@@ -352,6 +353,10 @@ export function HomePanel() {
 
     try {
       const dayRef = doc(db, "users", user.uid, "taskDays", selectedDate)
+      if (nextTasks.length === 0) {
+        await deleteDoc(dayRef)
+        return true
+      }
       await setDoc(
         dayRef,
         {

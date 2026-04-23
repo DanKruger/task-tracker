@@ -64,7 +64,7 @@ function buildRangeDates(endDateIso: string, days: number) {
   for (let i = days - 1; i >= 0; i -= 1) {
     const current = new Date(endDate)
     current.setDate(endDate.getDate() - i)
-    const iso = current.toISOString().slice(0, 10)
+    const iso = `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, "0")}-${String(current.getDate()).padStart(2, "0")}`
     dates.push(iso)
   }
 
@@ -149,7 +149,7 @@ export function PresentationsPanel() {
         0
       )
       return { date, count: dayTasks.length, minutes: dayMinutes }
-    })
+    }).filter((day) => day.count > 0)
 
     return {
       totalTasks,

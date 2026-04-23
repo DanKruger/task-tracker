@@ -149,6 +149,7 @@ export function DashboardPanel() {
         snapshot.forEach((dayDoc) => {
           const data = dayDoc.data() as TaskDayDoc
           const dayTasks = Array.isArray(data.tasks) ? data.tasks : []
+          if (dayTasks.length === 0) return
           const date = data.date ?? dayDoc.id
           const minutes = dayTasks.reduce(
             (sum, task) => sum + (Number(task.durationMinutes) || 0),

@@ -1,15 +1,19 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import {
-  onAuthStateChanged,
-  signInWithPopup,
-  signInWithRedirect,
-} from "firebase/auth"
+import { onAuthStateChanged, signInWithPopup, signInWithRedirect } from "firebase/auth"
+import { FcGoogle } from "react-icons/fc"
 import { useRouter } from "next/navigation"
 
-import { Button } from "@/components/ui/button"
 import { formatFirebaseAuthError } from "@/components/firebase-auth-error"
+import { Button } from "@/components/ui/button"
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card"
 import { auth, googleProvider } from "@/lib/firebase"
 
 export function LoginPanel() {
@@ -50,34 +54,42 @@ export function LoginPanel() {
   }
 
   return (
-    <div className="flex min-h-svh items-center justify-center p-6">
-      <div className="w-full max-w-md rounded-xl border bg-card p-6 shadow-sm">
-        <h1 className="text-xl font-semibold">Login</h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Sign in with Google to continue.
-        </p>
+    <div className="relative flex min-h-svh items-center justify-center overflow-hidden bg-muted/20 p-6">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,hsl(var(--primary)/0.14),transparent_42%),radial-gradient(circle_at_bottom_right,hsl(var(--primary)/0.09),transparent_45%)]" />
 
-        <div className="mt-6 space-y-2">
+      <Card className="relative z-10 w-full max-w-md">
+        <CardHeader className="space-y-2">
+          <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+            Welcome back
+          </p>
+          <CardTitle className="text-2xl">Task Tracker</CardTitle>
+          <CardDescription>
+            Sign in to view your tasks, dashboard metrics, and sprint presentations.
+          </CardDescription>
+        </CardHeader>
+
+        <CardContent className="space-y-3">
           {loadingAuth ? (
             <p className="text-sm">Checking auth session...</p>
           ) : (
             <>
-              <Button onClick={handleGoogleSignInPopup} className="w-full">
-                Sign in with Google (Popup)
+              <Button onClick={handleGoogleSignInPopup} className="w-full" size="lg">
+                <FcGoogle className="size-4" />
+                Login with Google
               </Button>
               <Button
                 variant="outline"
                 onClick={handleGoogleSignInRedirect}
                 className="w-full"
               >
-                Sign in with Google (Redirect)
+                Having popup issues? Use redirect login
               </Button>
             </>
           )}
-        </div>
 
-        {status ? <p className="mt-4 text-sm text-muted-foreground">{status}</p> : null}
-      </div>
+          {status ? <p className="text-sm text-muted-foreground">{status}</p> : null}
+        </CardContent>
+      </Card>
     </div>
   )
 }

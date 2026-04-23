@@ -573,7 +573,12 @@ export function PresentationsPanel() {
   }
 
   return (
-    <AppShell userEmail={user?.email} onLogout={handleSignOut}>
+    <AppShell
+      userEmail={user?.email}
+      userName={user?.displayName}
+      userAvatarUrl={user?.photoURL}
+      onLogout={handleSignOut}
+    >
       {loadingAuth ? <p className="mb-4 text-sm">Checking auth session...</p> : null}
 
       <Card>

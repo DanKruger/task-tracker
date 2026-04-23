@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation"
 
 import { AppShell } from "@/components/app-shell"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import {
   Card,
   CardContent,
@@ -14,6 +15,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
+import { Label } from "@/components/ui/label"
+import { Switch } from "@/components/ui/switch"
 import { auth, db } from "@/lib/firebase"
 
 type TaskStatus = "in_progress" | "testing" | "done"
@@ -47,6 +50,9 @@ type PeriodMetric = {
   minutes: number
 }
 
+type TimeUnit = "minutes" | "hours"
+type HeatMode = "count" | "time"
+
 function monthLabel(date: Date) {
   return date.toLocaleString(undefined, {
     month: "short",
@@ -69,6 +75,37 @@ function dateKey(date: Date) {
   return `${year}-${month}-${day}`
 }
 
+function formatReadableDate(dateString: string) {
+  const date = new Date(`${dateString}T00:00:00`)
+  return date.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  })
+}
+
+function formatDuration(minutes: number, unit: TimeUnit) {
+  if (unit === "hours") {
+    return `${(minutes / 60).toFixed(2)} h`
+  }
+  return `${minutes} min`
+}
+
+function formatDurationValue(minutes: number, unit: TimeUnit) {
+  if (unit === "hours") {
+    return (minutes / 60).toFixed(2)
+  }
+  return String(minutes)
+}
+
+function heatLevelClass(level: number) {
+  if (level <= 0) return "bg-muted/40"
+  if (level === 1) return "bg-emerald-200 dark:bg-emerald-900/40"
+  if (level === 2) return "bg-emerald-300 dark:bg-emerald-800/60"
+  if (level === 3) return "bg-emerald-500 dark:bg-emerald-700"
+  return "bg-emerald-700 dark:bg-emerald-500"
+}
+
 export function DashboardPanel() {
   const router = useRouter()
 
@@ -78,6 +115,8 @@ export function DashboardPanel() {
   const [statusMessage, setStatusMessage] = useState<string | null>(null)
   const [tasks, setTasks] = useState<TaskWithDate[]>([])
   const [dailyMetrics, setDailyMetrics] = useState<DayMetric[]>([])
+  const [timeUnit, setTimeUnit] = useState<TimeUnit>("minutes")
+  const [heatMode, setHeatMode] = useState<HeatMode>("count")
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (nextUser) => {
@@ -160,7 +199,7 @@ export function DashboardPanel() {
         existing.minutes += Number(task.durationMinutes) || 0
       } else {
         byWeek.set(key, {
-          label: key,
+          label: formatReadableDate(key),
           count: 1,
           minutes: Number(task.durationMinutes) || 0,
         })
@@ -202,6 +241,70 @@ export function DashboardPanel() {
   const maxWeekMinutes = Math.max(...weeklyMetrics.map((metric) => metric.minutes), 1)
   const maxMonthMinutes = Math.max(...monthlyMetrics.map((metric) => metric.minutes), 1)
 
+  const dayMetricMap = useMemo(() => {
+    const map = new Map<string, DayMetric>()
+    dailyMetrics.forEach((metric) => map.set(metric.date, metric))
+    return map
+  }, [dailyMetrics])
+
+  const heatmapWeeks = useMemo(() => {
+    const totalDays = 7 * 20
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+
+    const days = Array.from({ length: totalDays }, (_, index) => {
+      const date = new Date(today)
+      date.setDate(today.getDate() - (totalDays - 1 - index))
+      const key = dateKey(date)
+      const metric = dayMetricMap.get(key)
+      return {
+        date: key,
+        count: metric?.count ?? 0,
+        minutes: metric?.minutes ?? 0,
+      }
+    })
+
+    const values = days.map((day) => (heatMode === "count" ? day.count : day.minutes))
+    const maxValue = Math.max(...values, 1)
+
+    const leveled = days.map((day) => {
+      const value = heatMode === "count" ? day.count : day.minutes
+      const ratio = value / maxValue
+      const level = value === 0 ? 0 : Math.min(4, Math.ceil(ratio * 4))
+      return { ...day, value, level }
+    })
+
+    const weeks: Array<typeof leveled> = []
+    for (let i = 0; i < leveled.length; i += 7) {
+      weeks.push(leveled.slice(i, i + 7))
+    }
+
+    return weeks
+  }, [dayMetricMap, heatMode])
+
+  const heatmapMonthLabels = useMemo(() => {
+    let previousMonth = ""
+    return heatmapWeeks.map((week) => {
+      const firstDay = week[0]
+      if (!firstDay) return ""
+      const month = new Date(`${firstDay.date}T00:00:00`).toLocaleDateString(undefined, {
+        month: "short",
+      })
+      if (month === previousMonth) return ""
+      previousMonth = month
+      return month
+    })
+  }, [heatmapWeeks])
+
+  const weekdayLabels = useMemo(() => {
+    const firstWeek = heatmapWeeks[0] ?? []
+    return firstWeek.map((day) =>
+      new Date(`${day.date}T00:00:00`).toLocaleDateString(undefined, {
+        weekday: "short",
+      })
+    )
+  }, [heatmapWeeks])
+
   async function handleSignOut() {
     try {
       await signOut(auth)
@@ -212,10 +315,41 @@ export function DashboardPanel() {
   }
 
   return (
-    <AppShell userEmail={user?.email} onLogout={handleSignOut}>
+    <AppShell
+      userEmail={user?.email}
+      userName={user?.displayName}
+      userAvatarUrl={user?.photoURL}
+      onLogout={handleSignOut}
+    >
       {loadingAuth ? <p className="mb-4 text-sm">Checking auth session...</p> : null}
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <Card>
+        <CardHeader className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+          <div>
+            <CardTitle>Dashboard controls</CardTitle>
+            <CardDescription>Adjust units and heatmap mode.</CardDescription>
+          </div>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:gap-6">
+            <div className="space-y-2">
+              <Label htmlFor="time-unit-switch">Show time as</Label>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">Min</span>
+                <Switch
+                  id="time-unit-switch"
+                  checked={timeUnit === "hours"}
+                  onCheckedChange={(checked) =>
+                    setTimeUnit(checked ? "hours" : "minutes")
+                  }
+                />
+                <span className="text-xs text-muted-foreground">Hours</span>
+              </div>
+            </div>
+
+          </div>
+        </CardHeader>
+      </Card>
+
+      <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <Card>
           <CardHeader className="pb-2">
             <CardDescription>Total tasks</CardDescription>
@@ -224,14 +358,14 @@ export function DashboardPanel() {
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardDescription>Total minutes</CardDescription>
-            <CardTitle className="text-2xl">{totalMinutes}</CardTitle>
+            <CardDescription>{timeUnit === "hours" ? "Total hours" : "Total minutes"}</CardDescription>
+            <CardTitle className="text-2xl">{formatDurationValue(totalMinutes, timeUnit)}</CardTitle>
           </CardHeader>
         </Card>
         <Card>
           <CardHeader className="pb-2">
             <CardDescription>Average time per task</CardDescription>
-            <CardTitle className="text-2xl">{avgMinutes} min</CardTitle>
+            <CardTitle className="text-2xl">{formatDuration(avgMinutes, timeUnit)}</CardTitle>
           </CardHeader>
         </Card>
         <Card>
@@ -282,12 +416,98 @@ export function DashboardPanel() {
               dailyMetrics.slice(0, 7).map((day) => (
                 <div key={day.date} className="flex items-center justify-between rounded-lg border p-3">
                   <div>
-                    <p className="font-medium">{day.date}</p>
+                    <p className="font-medium">{formatReadableDate(day.date)}</p>
                     <p className="text-xs text-muted-foreground">{day.count} task(s)</p>
                   </div>
-                  <Badge variant="outline">{day.minutes} min</Badge>
+                  <Badge variant="outline">{formatDuration(day.minutes, timeUnit)}</Badge>
                 </div>
               ))}
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="mt-4">
+        <Card>
+          <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <CardTitle>Contribution heatmap</CardTitle>
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                variant={heatMode === "count" ? "default" : "outline"}
+                onClick={() => setHeatMode("count")}
+              >
+                Task count
+              </Button>
+              <Button
+                size="sm"
+                variant={heatMode === "time" ? "default" : "outline"}
+                onClick={() => setHeatMode("time")}
+              >
+                Time spent
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto">
+              <div className="inline-block min-w-max">
+                <div className="mb-2 flex gap-2 pl-10 text-[10px] text-muted-foreground">
+                  {heatmapMonthLabels.map((month, index) => (
+                    <span
+                      key={`month-${index}`}
+                      className="w-3 text-left leading-3 whitespace-nowrap"
+                    >
+                      {month}
+                    </span>
+                  ))}
+                </div>
+
+                <div className="flex gap-2">
+                  <div className="w-10 grid grid-rows-7 gap-1 text-[10px] text-muted-foreground">
+                    {weekdayLabels.map((label, index) => (
+                      <span
+                        key={`weekday-${index}`}
+                        className="flex h-3 items-center leading-3"
+                      >
+                        {index % 2 === 0 ? label : ""}
+                      </span>
+                    ))}
+                  </div>
+
+                  <div className="inline-flex gap-1">
+                    {heatmapWeeks.map((week, weekIndex) => (
+                      <div key={`week-${weekIndex}`} className="grid grid-rows-7 gap-1">
+                        {week.map((day) => {
+                          const tooltipValue =
+                            heatMode === "count"
+                              ? `${day.count} task(s)`
+                              : formatDuration(day.minutes, timeUnit)
+
+                          return (
+                            <div
+                              key={day.date}
+                              title={`${formatReadableDate(day.date)}: ${tooltipValue}`}
+                              className={`size-3 rounded-[3px] ${heatLevelClass(day.level)}`}
+                            />
+                          )
+                        })}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
+              <span>Less</span>
+              <div className="flex items-center gap-1">
+                {[0, 1, 2, 3, 4].map((level) => (
+                  <span
+                    key={level}
+                    className={`size-3 rounded-[3px] ${heatLevelClass(level)}`}
+                  />
+                ))}
+              </div>
+              <span>More</span>
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -296,7 +516,9 @@ export function DashboardPanel() {
         <Card>
           <CardHeader>
             <CardTitle>Weekly report</CardTitle>
-            <CardDescription>Last 8 weeks by total minutes.</CardDescription>
+            <CardDescription>
+              Last 8 weeks by total {timeUnit === "hours" ? "hours" : "minutes"}.
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             {weeklyMetrics.length === 0 ? (
@@ -307,7 +529,7 @@ export function DashboardPanel() {
                   <div className="flex items-center justify-between text-xs">
                     <span>{metric.label}</span>
                     <span>
-                      {metric.minutes} min • {metric.count} task(s)
+                      {formatDuration(metric.minutes, timeUnit)} • {metric.count} task(s)
                     </span>
                   </div>
                   <div className="h-2 w-full rounded-full bg-muted">
@@ -325,7 +547,9 @@ export function DashboardPanel() {
         <Card>
           <CardHeader>
             <CardTitle>Monthly report</CardTitle>
-            <CardDescription>Last 6 months by total minutes.</CardDescription>
+            <CardDescription>
+              Last 6 months by total {timeUnit === "hours" ? "hours" : "minutes"}.
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             {monthlyMetrics.length === 0 ? (
@@ -336,7 +560,7 @@ export function DashboardPanel() {
                   <div className="flex items-center justify-between text-xs">
                     <span>{metric.label}</span>
                     <span>
-                      {metric.minutes} min • {metric.count} task(s)
+                      {formatDuration(metric.minutes, timeUnit)} • {metric.count} task(s)
                     </span>
                   </div>
                   <div className="h-2 w-full rounded-full bg-muted">

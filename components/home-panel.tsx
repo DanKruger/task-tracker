@@ -1,6 +1,6 @@
 "use client"
 
-import { FormEvent, useEffect, useMemo, useState } from "react"
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react"
 import { FirebaseError } from "firebase/app"
 import { onAuthStateChanged, signOut, type User } from "firebase/auth"
 import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore"
@@ -16,6 +16,14 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
@@ -47,6 +55,7 @@ type TaskFormState = {
 }
 
 type TaskFilterStatus = "all" | TaskStatus
+type HomeViewMode = "list" | "calendar"
 
 type SortKey =
   | "created_desc"
@@ -56,11 +65,24 @@ type SortKey =
   | "title_asc"
   | "title_desc"
 
+type CalendarDaySummary = {
+  count: number
+  minutes: number
+}
+
 const statusOptions: Array<{ value: TaskStatus; label: string }> = [
   { value: "in_progress", label: "In progress" },
   { value: "testing", label: "Testing" },
   { value: "done", label: "Done" },
 ]
+
+const emptyTaskForm: TaskFormState = {
+  title: "",
+  status: "in_progress",
+  durationMinutes: "",
+  description: "",
+  link: "",
+}
 
 function todayIsoDate() {
   const now = new Date()
@@ -88,6 +110,29 @@ function normalizeTaskForm(task: TaskItem): TaskFormState {
   }
 }
 
+function getMonthDateRange(month: string) {
+  const [yearRaw, monthRaw] = month.split("-")
+  const year = Number(yearRaw)
+  const monthIndex = Number(monthRaw) - 1
+
+  const startDate = new Date(year, monthIndex, 1)
+  const endDate = new Date(year, monthIndex + 1, 0)
+  return { startDate, endDate }
+}
+
+function toIsoDate(date: Date) {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, "0")
+  const day = String(date.getDate()).padStart(2, "0")
+  return `${year}-${month}-${day}`
+}
+
+function formatMonthLabel(month: string) {
+  const [yearRaw, monthRaw] = month.split("-")
+  const date = new Date(Number(yearRaw), Number(monthRaw) - 1, 1)
+  return date.toLocaleDateString(undefined, { month: "long", year: "numeric" })
+}
+
 export function HomePanel() {
   const router = useRouter()
 
@@ -96,24 +141,48 @@ export function HomePanel() {
   const [loadingTasks, setLoadingTasks] = useState(false)
   const [savingTask, setSavingTask] = useState(false)
   const [statusMessage, setStatusMessage] = useState<string | null>(null)
-  const [showNewTaskForm, setShowNewTaskForm] = useState(false)
 
   const [selectedDate, setSelectedDate] = useState(todayIsoDate)
   const [tasks, setTasks] = useState<TaskItem[]>([])
-  const [form, setForm] = useState<TaskFormState>({
-    title: "",
-    status: "in_progress",
-    durationMinutes: "",
-    description: "",
-    link: "",
-  })
+  const [viewMode, setViewMode] = useState<HomeViewMode>("list")
+  const [calendarMonth, setCalendarMonth] = useState(() => todayIsoDate().slice(0, 7))
+  const [calendarSummaries, setCalendarSummaries] = useState<
+    Record<string, CalendarDaySummary>
+  >({})
 
   const [searchQuery, setSearchQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState<TaskFilterStatus>("all")
   const [sortKey, setSortKey] = useState<SortKey>("created_desc")
 
-  const [editingTaskId, setEditingTaskId] = useState<string | null>(null)
-  const [editForm, setEditForm] = useState<TaskFormState | null>(null)
+  const [taskModalOpen, setTaskModalOpen] = useState(false)
+  const [taskModalMode, setTaskModalMode] = useState<"create" | "edit">("create")
+  const [taskForm, setTaskForm] = useState<TaskFormState>(emptyTaskForm)
+  const [activeTaskId, setActiveTaskId] = useState<string | null>(null)
+
+  const selectedDateSummary = calendarSummaries[selectedDate]
+
+  const calendarGrid = useMemo(() => {
+    const { startDate, endDate } = getMonthDateRange(calendarMonth)
+    const firstWeekday = startDate.getDay()
+    const daysInMonth = endDate.getDate()
+
+    const cells: Array<{ date: string | null; dayNumber: number | null }> = []
+
+    for (let i = 0; i < firstWeekday; i += 1) {
+      cells.push({ date: null, dayNumber: null })
+    }
+
+    for (let day = 1; day <= daysInMonth; day += 1) {
+      const date = new Date(startDate.getFullYear(), startDate.getMonth(), day)
+      cells.push({ date: toIsoDate(date), dayNumber: day })
+    }
+
+    while (cells.length % 7 !== 0) {
+      cells.push({ date: null, dayNumber: null })
+    }
+
+    return cells
+  }, [calendarMonth])
 
   const totalMinutes = useMemo(
     () => tasks.reduce((sum, task) => sum + task.durationMinutes, 0),
@@ -159,6 +228,41 @@ export function HomePanel() {
     return next
   }, [searchQuery, sortKey, statusFilter, tasks])
 
+  const syncCalendarSummaryForDate = useCallback(
+    (date: string, dayTasks: TaskItem[]) => {
+      if (date.slice(0, 7) !== calendarMonth) {
+        return
+      }
+
+      const count = dayTasks.length
+      const minutes = dayTasks.reduce(
+        (sum, task) => sum + (Number(task.durationMinutes) || 0),
+        0
+      )
+
+      setCalendarSummaries((prev) => {
+        const current = prev[date]
+
+        if (count === 0) {
+          if (!current) return prev
+          const next = { ...prev }
+          delete next[date]
+          return next
+        }
+
+        if (current && current.count === count && current.minutes === minutes) {
+          return prev
+        }
+
+        return {
+          ...prev,
+          [date]: { count, minutes },
+        }
+      })
+    },
+    [calendarMonth]
+  )
+
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (nextUser) => {
       setUser(nextUser)
@@ -186,11 +290,14 @@ export function HomePanel() {
 
         if (!snapshot.exists()) {
           setTasks([])
+          syncCalendarSummaryForDate(selectedDate, [])
           return
         }
 
         const data = snapshot.data() as Partial<TaskDayDoc>
-        setTasks(Array.isArray(data.tasks) ? data.tasks : [])
+        const nextTasks = Array.isArray(data.tasks) ? data.tasks : []
+        setTasks(nextTasks)
+        syncCalendarSummaryForDate(selectedDate, nextTasks)
       } catch {
         setStatusMessage("Failed to load tasks for the selected day.")
       } finally {
@@ -199,7 +306,46 @@ export function HomePanel() {
     }
 
     void loadDayTasks()
-  }, [selectedDate, user])
+  }, [selectedDate, syncCalendarSummaryForDate, user])
+
+  useEffect(() => {
+    if (!user) return
+    const uid = user.uid
+
+    async function loadCalendarMonthSummaries() {
+      try {
+        const { startDate, endDate } = getMonthDateRange(calendarMonth)
+        const totalDays = endDate.getDate()
+
+        const docs = await Promise.all(
+          Array.from({ length: totalDays }, (_, index) => {
+            const date = new Date(startDate.getFullYear(), startDate.getMonth(), index + 1)
+            const iso = toIsoDate(date)
+            const dayRef = doc(db, "users", uid, "taskDays", iso)
+            return getDoc(dayRef).then((snapshot) => ({ iso, snapshot }))
+          })
+        )
+
+        const next: Record<string, CalendarDaySummary> = {}
+        docs.forEach(({ iso, snapshot }) => {
+          if (!snapshot.exists()) return
+          const data = snapshot.data() as Partial<TaskDayDoc>
+          const dayTasks = Array.isArray(data.tasks) ? data.tasks : []
+          const minutes = dayTasks.reduce(
+            (sum, task) => sum + (Number(task.durationMinutes) || 0),
+            0
+          )
+          next[iso] = { count: dayTasks.length, minutes }
+        })
+
+        setCalendarSummaries(next)
+      } catch {
+        setStatusMessage("Failed to load calendar summaries.")
+      }
+    }
+
+    void loadCalendarMonthSummaries()
+  }, [calendarMonth, user])
 
   async function persistTasks(nextTasks: TaskItem[]) {
     if (!user) return false
@@ -226,13 +372,53 @@ export function HomePanel() {
     }
   }
 
-  async function handleAddTask(event: FormEvent<HTMLFormElement>) {
+  function openCreateTaskModal() {
+    setTaskModalMode("create")
+    setActiveTaskId(null)
+    setTaskForm(emptyTaskForm)
+    setStatusMessage(null)
+    setTaskModalOpen(true)
+  }
+
+  function openEditTaskModal(task: TaskItem) {
+    setTaskModalMode("edit")
+    setActiveTaskId(task.id)
+    setTaskForm(normalizeTaskForm(task))
+    setStatusMessage(null)
+    setTaskModalOpen(true)
+  }
+
+  function closeTaskModal() {
+    setTaskModalOpen(false)
+    setActiveTaskId(null)
+    setTaskForm(emptyTaskForm)
+  }
+
+  function goToPreviousMonth() {
+    const [yearRaw, monthRaw] = calendarMonth.split("-")
+    const date = new Date(Number(yearRaw), Number(monthRaw) - 2, 1)
+    setCalendarMonth(toIsoDate(date).slice(0, 7))
+  }
+
+  function goToNextMonth() {
+    const [yearRaw, monthRaw] = calendarMonth.split("-")
+    const date = new Date(Number(yearRaw), Number(monthRaw), 1)
+    setCalendarMonth(toIsoDate(date).slice(0, 7))
+  }
+
+  function handleCalendarDaySelect(date: string) {
+    setSelectedDate(date)
+    setViewMode("list")
+    setStatusMessage(null)
+  }
+
+  async function handleTaskModalSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
-    const trimmedTitle = form.title.trim()
-    const trimmedDescription = form.description.trim()
-    const trimmedLink = form.link.trim()
-    const parsedDuration = Number(form.durationMinutes)
+    const trimmedTitle = taskForm.title.trim()
+    const trimmedDescription = taskForm.description.trim()
+    const trimmedLink = taskForm.link.trim()
+    const parsedDuration = Number(taskForm.durationMinutes)
 
     if (!trimmedTitle) {
       setStatusMessage("Task title is required.")
@@ -247,32 +433,63 @@ export function HomePanel() {
     setSavingTask(true)
     setStatusMessage(null)
 
-    const newTask: TaskItem = {
-      id: crypto.randomUUID(),
-      title: trimmedTitle,
-      status: form.status,
-      durationMinutes: parsedDuration,
-      createdAt: new Date().toISOString(),
-      ...(trimmedDescription ? { description: trimmedDescription } : {}),
-      ...(trimmedLink ? { link: trimmedLink } : {}),
+    if (taskModalMode === "create") {
+      const newTask: TaskItem = {
+        id: crypto.randomUUID(),
+        title: trimmedTitle,
+        status: taskForm.status,
+        durationMinutes: parsedDuration,
+        createdAt: new Date().toISOString(),
+        ...(trimmedDescription ? { description: trimmedDescription } : {}),
+        ...(trimmedLink ? { link: trimmedLink } : {}),
+      }
+
+      const nextTasks = [newTask, ...tasks]
+      const saved = await persistTasks(nextTasks)
+
+      if (saved) {
+        setTasks(nextTasks)
+        syncCalendarSummaryForDate(selectedDate, nextTasks)
+        closeTaskModal()
+        setStatusMessage("Task added.")
+      }
+
+      setSavingTask(false)
+      return
     }
 
-    const nextTasks = [newTask, ...tasks]
+    if (!activeTaskId) {
+      setSavingTask(false)
+      setStatusMessage("No task selected for edit.")
+      return
+    }
+
+    const nextTasks = tasks.map((task) =>
+      task.id === activeTaskId
+        ? {
+            ...task,
+            title: trimmedTitle,
+            status: taskForm.status,
+            durationMinutes: parsedDuration,
+            ...(trimmedDescription ? { description: trimmedDescription } : {}),
+            ...(trimmedLink ? { link: trimmedLink } : {}),
+          }
+        : task
+    )
+
+    setTasks(nextTasks)
+    syncCalendarSummaryForDate(selectedDate, nextTasks)
     const saved = await persistTasks(nextTasks)
 
-    if (saved) {
-      setTasks(nextTasks)
-      setForm((prev) => ({
-        ...prev,
-        title: "",
-        durationMinutes: "",
-        description: "",
-        link: "",
-      }))
-      setShowNewTaskForm(false)
-      setStatusMessage("Task added.")
+    if (!saved) {
+      setTasks(tasks)
+      syncCalendarSummaryForDate(selectedDate, tasks)
+      setSavingTask(false)
+      return
     }
 
+    closeTaskModal()
+    setStatusMessage("Task updated.")
     setSavingTask(false)
   }
 
@@ -282,70 +499,17 @@ export function HomePanel() {
     )
 
     setTasks(nextTasks)
+    syncCalendarSummaryForDate(selectedDate, nextTasks)
     setStatusMessage(null)
 
     const saved = await persistTasks(nextTasks)
     if (!saved) {
       setTasks(tasks)
+      syncCalendarSummaryForDate(selectedDate, tasks)
       return
     }
 
     setStatusMessage("Task status updated.")
-  }
-
-  function beginEdit(task: TaskItem) {
-    setEditingTaskId(task.id)
-    setEditForm(normalizeTaskForm(task))
-    setStatusMessage(null)
-  }
-
-  function cancelEdit() {
-    setEditingTaskId(null)
-    setEditForm(null)
-  }
-
-  async function saveEdit(taskId: string) {
-    if (!editForm) return
-
-    const trimmedTitle = editForm.title.trim()
-    const trimmedDescription = editForm.description.trim()
-    const trimmedLink = editForm.link.trim()
-    const parsedDuration = Number(editForm.durationMinutes)
-
-    if (!trimmedTitle) {
-      setStatusMessage("Task title is required.")
-      return
-    }
-
-    if (!Number.isFinite(parsedDuration) || parsedDuration <= 0) {
-      setStatusMessage("Time spent must be a positive number of minutes.")
-      return
-    }
-
-    const nextTasks = tasks.map((task) =>
-      task.id === taskId
-        ? {
-            ...task,
-            title: trimmedTitle,
-            status: editForm.status,
-            durationMinutes: parsedDuration,
-            ...(trimmedDescription ? { description: trimmedDescription } : {}),
-            ...(trimmedLink ? { link: trimmedLink } : {}),
-          }
-        : task
-    )
-
-    setTasks(nextTasks)
-    setStatusMessage(null)
-
-    const saved = await persistTasks(nextTasks)
-    if (!saved) {
-      setTasks(tasks)
-      return
-    }
-
-    setStatusMessage("Task updated.")
-    cancelEdit()
   }
 
   async function handleDeleteTask(taskId: string) {
@@ -363,10 +527,6 @@ export function HomePanel() {
       return
     }
 
-    if (editingTaskId === taskId) {
-      cancelEdit()
-    }
-
     setStatusMessage("Task deleted.")
   }
 
@@ -380,109 +540,307 @@ export function HomePanel() {
   }
 
   return (
-    <AppShell userEmail={user?.email} onLogout={handleSignOut}>
+    <AppShell
+      userEmail={user?.email}
+      userName={user?.displayName}
+      userAvatarUrl={user?.photoURL}
+      onLogout={handleSignOut}
+    >
       {loadingAuth ? <p className="mb-4 text-sm">Checking auth session...</p> : null}
 
       <Card>
         <CardHeader className="flex flex-col gap-4">
-          <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+          <div className="flex items-start justify-between gap-4">
             <div>
               <CardTitle>Tasks</CardTitle>
               <CardDescription>
-                {tasks.length} task(s) for {selectedDate} • {totalMinutes} total minute(s)
+                {viewMode === "list"
+                  ? `${tasks.length} task(s) for ${selectedDate} • ${totalMinutes} total minute(s)`
+                  : `Calendar view for ${formatMonthLabel(calendarMonth)}`}
               </CardDescription>
             </div>
-            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-end">
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant={viewMode === "list" ? "default" : "outline"}
+                onClick={() => setViewMode("list")}
+              >
+                List
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={viewMode === "calendar" ? "default" : "outline"}
+                onClick={() => setViewMode("calendar")}
+              >
+                Calendar
+              </Button>
+              <Button type="button" onClick={openCreateTaskModal}>
+                New task
+              </Button>
+            </div>
+          </div>
+
+          {viewMode === "list" ? (
+            <div className="grid gap-3 md:grid-cols-4">
               <div className="space-y-2">
                 <Label htmlFor="task-date">Date</Label>
                 <Input
                   id="task-date"
                   type="date"
                   value={selectedDate}
-                  onChange={(event) => setSelectedDate(event.target.value)}
+                  onChange={(event) => {
+                    setSelectedDate(event.target.value)
+                    setCalendarMonth(event.target.value.slice(0, 7))
+                  }}
                   required
                 />
               </div>
-              <Button
-                type="button"
-                onClick={() => setShowNewTaskForm((prev) => !prev)}
-                className="sm:mb-[1px]"
-              >
-                {showNewTaskForm ? "Close" : "New task"}
-              </Button>
+              <div className="space-y-2">
+                <Label htmlFor="task-search">Search</Label>
+                <Input
+                  id="task-search"
+                  placeholder="Search title, description, link"
+                  value={searchQuery}
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="task-filter-status">Status filter</Label>
+                <select
+                  id="task-filter-status"
+                  value={statusFilter}
+                  onChange={(event) =>
+                    setStatusFilter(event.target.value as TaskFilterStatus)
+                  }
+                  className="border-input focus-visible:border-ring focus-visible:ring-ring/50 h-9 w-full rounded-md border bg-transparent px-3 text-sm outline-none focus-visible:ring-[3px]"
+                >
+                  <option value="all">All statuses</option>
+                  {statusOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="task-sort">Sort</Label>
+                <select
+                  id="task-sort"
+                  value={sortKey}
+                  onChange={(event) => setSortKey(event.target.value as SortKey)}
+                  className="border-input focus-visible:border-ring focus-visible:ring-ring/50 h-9 w-full rounded-md border bg-transparent px-3 text-sm outline-none focus-visible:ring-[3px]"
+                >
+                  <option value="created_desc">Newest first</option>
+                  <option value="created_asc">Oldest first</option>
+                  <option value="duration_desc">Duration high to low</option>
+                  <option value="duration_asc">Duration low to high</option>
+                  <option value="title_asc">Title A-Z</option>
+                  <option value="title_desc">Title Z-A</option>
+                </select>
+              </div>
             </div>
-          </div>
-
-          <div className="grid gap-3 md:grid-cols-3">
-            <div className="space-y-2">
-              <Label htmlFor="task-search">Search</Label>
-              <Input
-                id="task-search"
-                placeholder="Search title, description, link"
-                value={searchQuery}
-                onChange={(event) => setSearchQuery(event.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="task-filter-status">Status filter</Label>
-              <select
-                id="task-filter-status"
-                value={statusFilter}
-                onChange={(event) =>
-                  setStatusFilter(event.target.value as TaskFilterStatus)
-                }
-                className="border-input focus-visible:border-ring focus-visible:ring-ring/50 h-9 w-full rounded-md border bg-transparent px-3 text-sm outline-none focus-visible:ring-[3px]"
-              >
-                <option value="all">All statuses</option>
-                {statusOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="task-sort">Sort</Label>
-              <select
-                id="task-sort"
-                value={sortKey}
-                onChange={(event) => setSortKey(event.target.value as SortKey)}
-                className="border-input focus-visible:border-ring focus-visible:ring-ring/50 h-9 w-full rounded-md border bg-transparent px-3 text-sm outline-none focus-visible:ring-[3px]"
-              >
-                <option value="created_desc">Newest first</option>
-                <option value="created_asc">Oldest first</option>
-                <option value="duration_desc">Duration high to low</option>
-                <option value="duration_asc">Duration low to high</option>
-                <option value="title_asc">Title A-Z</option>
-                <option value="title_desc">Title Z-A</option>
-              </select>
-            </div>
-          </div>
+          ) : null}
         </CardHeader>
 
-        {showNewTaskForm ? (
-          <CardContent className="border-t pt-6">
-            <form className="grid gap-4 md:grid-cols-2" onSubmit={handleAddTask}>
-              <div className="space-y-2 md:col-span-2">
-                <Label htmlFor="task-title">Task title</Label>
-                <Input
-                  id="task-title"
-                  placeholder="Implement ticket export"
-                  value={form.title}
-                  onChange={(event) =>
-                    setForm((prev) => ({ ...prev, title: event.target.value }))
-                  }
-                  required
-                />
-              </div>
+        {viewMode === "list" ? (
+          <CardContent className="pt-6">
+            <div className="overflow-x-auto rounded-lg border">
+              <table className="w-full min-w-[980px] text-sm">
+                <thead className="bg-muted/40 text-left">
+                  <tr>
+                    <th className="px-4 py-3 font-medium">Task</th>
+                    <th className="px-4 py-3 font-medium">Status</th>
+                    <th className="px-4 py-3 font-medium">Time (min)</th>
+                    <th className="px-4 py-3 font-medium">Description</th>
+                    <th className="px-4 py-3 font-medium">Link</th>
+                    <th className="px-4 py-3 font-medium">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {loadingTasks ? (
+                    <tr>
+                      <td colSpan={6} className="px-4 py-6 text-muted-foreground">
+                        Loading tasks...
+                      </td>
+                    </tr>
+                  ) : null}
 
+                  {!loadingTasks && filteredTasks.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="px-4 py-6 text-muted-foreground">
+                        No tasks match current filters.
+                      </td>
+                    </tr>
+                  ) : null}
+
+                  {!loadingTasks &&
+                    filteredTasks.map((task) => (
+                      <tr key={task.id} className="border-t align-top">
+                        <td className="px-4 py-3 font-medium">{task.title}</td>
+                        <td className="px-4 py-3">
+                          <Badge variant={statusBadgeVariant(task.status)}>
+                            {displayStatus(task.status)}
+                          </Badge>
+                        </td>
+                        <td className="px-4 py-3">{task.durationMinutes}</td>
+                        <td className="max-w-[280px] px-4 py-3 text-muted-foreground">
+                          {task.description ?? "-"}
+                        </td>
+                        <td className="max-w-[240px] px-4 py-3">
+                          {task.link ? (
+                            <a
+                              href={task.link}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-primary underline-offset-4 hover:underline"
+                            >
+                              Open
+                            </a>
+                          ) : (
+                            <span className="text-muted-foreground">-</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => openEditTaskModal(task)}
+                            >
+                              Edit
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              onClick={() => void handleDeleteTask(task.id)}
+                            >
+                              Delete
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() =>
+                                void handleStatusChange(
+                                  task.id,
+                                  task.status === "in_progress"
+                                    ? "testing"
+                                    : task.status === "testing"
+                                      ? "done"
+                                      : "in_progress"
+                                )
+                              }
+                            >
+                              Next status
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        ) : (
+          <CardContent className="pt-6">
+            <div className="mb-4 flex items-center justify-between">
+              <Button variant="outline" size="sm" onClick={goToPreviousMonth}>
+                Previous
+              </Button>
+              <p className="text-sm font-medium">{formatMonthLabel(calendarMonth)}</p>
+              <Button variant="outline" size="sm" onClick={goToNextMonth}>
+                Next
+              </Button>
+            </div>
+
+            <div className="grid grid-cols-7 gap-2 text-xs text-muted-foreground">
+              {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
+                <div key={day} className="px-2 py-1 font-medium">
+                  {day}
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-1 grid grid-cols-7 gap-2">
+              {calendarGrid.map((cell, index) => {
+                if (!cell.date || !cell.dayNumber) {
+                  return <div key={`empty-${index}`} className="h-24 rounded-md border bg-muted/20" />
+                }
+
+                const summary = calendarSummaries[cell.date]
+                const isSelected = cell.date === selectedDate
+
+                return (
+                  <button
+                    key={cell.date}
+                    type="button"
+                    onClick={() => handleCalendarDaySelect(cell.date as string)}
+                    className={`h-24 rounded-md border p-2 text-left transition-colors hover:bg-muted/40 ${
+                      isSelected ? "border-primary bg-primary/5" : "bg-background"
+                    }`}
+                  >
+                    <p className="text-sm font-medium">{cell.dayNumber}</p>
+                    {summary ? (
+                      <div className="mt-1 text-xs text-muted-foreground">
+                        <p>{summary.count} task(s)</p>
+                        <p>{summary.minutes} min</p>
+                      </div>
+                    ) : null}
+                  </button>
+                )
+              })}
+            </div>
+
+            {selectedDateSummary ? (
+              <p className="mt-4 text-sm text-muted-foreground">
+                Selected {selectedDate}: {selectedDateSummary.count} task(s),{" "}
+                {selectedDateSummary.minutes} minute(s)
+              </p>
+            ) : (
+              <p className="mt-4 text-sm text-muted-foreground">
+                Selected {selectedDate}: no tasks logged.
+              </p>
+            )}
+          </CardContent>
+        )}
+      </Card>
+
+      <Dialog open={taskModalOpen} onOpenChange={setTaskModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {taskModalMode === "create" ? "Create task" : "Edit task"}
+            </DialogTitle>
+            <DialogDescription>
+              {taskModalMode === "create"
+                ? "Add a new task for the selected date."
+                : "Update task details."}
+            </DialogDescription>
+          </DialogHeader>
+
+          <form className="grid gap-4" onSubmit={handleTaskModalSubmit}>
+            <div className="space-y-2">
+              <Label htmlFor="modal-task-title">Task title</Label>
+              <Input
+                id="modal-task-title"
+                placeholder="Implement ticket export"
+                value={taskForm.title}
+                onChange={(event) =>
+                  setTaskForm((prev) => ({ ...prev, title: event.target.value }))
+                }
+                required
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
-                <Label htmlFor="task-status">Status</Label>
+                <Label htmlFor="modal-task-status">Status</Label>
                 <select
-                  id="task-status"
-                  value={form.status}
+                  id="modal-task-status"
+                  value={taskForm.status}
                   onChange={(event) =>
-                    setForm((prev) => ({
+                    setTaskForm((prev) => ({
                       ...prev,
                       status: event.target.value as TaskStatus,
                     }))
@@ -498,15 +856,15 @@ export function HomePanel() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="task-duration">Time spent (min)</Label>
+                <Label htmlFor="modal-task-duration">Time spent (min)</Label>
                 <Input
-                  id="task-duration"
+                  id="modal-task-duration"
                   type="number"
                   min={1}
                   placeholder="90"
-                  value={form.durationMinutes}
+                  value={taskForm.durationMinutes}
                   onChange={(event) =>
-                    setForm((prev) => ({
+                    setTaskForm((prev) => ({
                       ...prev,
                       durationMinutes: event.target.value,
                     }))
@@ -514,253 +872,48 @@ export function HomePanel() {
                   required
                 />
               </div>
+            </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="task-link">Link (optional)</Label>
-                <Input
-                  id="task-link"
-                  type="url"
-                  placeholder="https://github.com/org/repo/pull/123"
-                  value={form.link}
-                  onChange={(event) =>
-                    setForm((prev) => ({ ...prev, link: event.target.value }))
-                  }
-                />
-              </div>
+            <div className="space-y-2">
+              <Label htmlFor="modal-task-link">Link (optional)</Label>
+              <Input
+                id="modal-task-link"
+                type="url"
+                placeholder="https://github.com/org/repo/pull/123"
+                value={taskForm.link}
+                onChange={(event) =>
+                  setTaskForm((prev) => ({ ...prev, link: event.target.value }))
+                }
+              />
+            </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="task-description">Description (optional)</Label>
-                <Textarea
-                  id="task-description"
-                  placeholder="Short notes about what was done"
-                  value={form.description}
-                  onChange={(event) =>
-                    setForm((prev) => ({ ...prev, description: event.target.value }))
-                  }
-                />
-              </div>
+            <div className="space-y-2">
+              <Label htmlFor="modal-task-description">Description (optional)</Label>
+              <Textarea
+                id="modal-task-description"
+                placeholder="Short notes about what was done"
+                value={taskForm.description}
+                onChange={(event) =>
+                  setTaskForm((prev) => ({ ...prev, description: event.target.value }))
+                }
+              />
+            </div>
 
-              <div className="flex gap-2 md:col-span-2">
-                <Button type="submit" disabled={savingTask || loadingTasks}>
-                  {savingTask ? "Saving..." : "Save task"}
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setShowNewTaskForm(false)}
-                >
-                  Cancel
-                </Button>
-              </div>
-            </form>
-          </CardContent>
-        ) : null}
-
-        <CardContent className="pt-6">
-          <div className="overflow-x-auto rounded-lg border">
-            <table className="w-full min-w-[980px] text-sm">
-              <thead className="bg-muted/40 text-left">
-                <tr>
-                  <th className="px-4 py-3 font-medium">Task</th>
-                  <th className="px-4 py-3 font-medium">Status</th>
-                  <th className="px-4 py-3 font-medium">Time (min)</th>
-                  <th className="px-4 py-3 font-medium">Description</th>
-                  <th className="px-4 py-3 font-medium">Link</th>
-                  <th className="px-4 py-3 font-medium">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {loadingTasks ? (
-                  <tr>
-                    <td colSpan={6} className="px-4 py-6 text-muted-foreground">
-                      Loading tasks...
-                    </td>
-                  </tr>
-                ) : null}
-
-                {!loadingTasks && filteredTasks.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="px-4 py-6 text-muted-foreground">
-                      No tasks match current filters.
-                    </td>
-                  </tr>
-                ) : null}
-
-                {!loadingTasks &&
-                  filteredTasks.map((task) => {
-                    const isEditing = editingTaskId === task.id && editForm
-
-                    return (
-                      <tr key={task.id} className="border-t align-top">
-                        <td className="px-4 py-3 font-medium">
-                          {isEditing ? (
-                            <Input
-                              value={editForm.title}
-                              onChange={(event) =>
-                                setEditForm((prev) =>
-                                  prev
-                                    ? { ...prev, title: event.target.value }
-                                    : prev
-                                )
-                              }
-                            />
-                          ) : (
-                            task.title
-                          )}
-                        </td>
-
-                        <td className="px-4 py-3">
-                          {isEditing ? (
-                            <select
-                              value={editForm.status}
-                              onChange={(event) =>
-                                setEditForm((prev) =>
-                                  prev
-                                    ? {
-                                        ...prev,
-                                        status: event.target.value as TaskStatus,
-                                      }
-                                    : prev
-                                )
-                              }
-                              className="border-input focus-visible:border-ring focus-visible:ring-ring/50 h-8 rounded-md border bg-transparent px-2 text-xs outline-none focus-visible:ring-[3px]"
-                            >
-                              {statusOptions.map((option) => (
-                                <option key={option.value} value={option.value}>
-                                  {option.label}
-                                </option>
-                              ))}
-                            </select>
-                          ) : (
-                            <Badge variant={statusBadgeVariant(task.status)}>
-                              {displayStatus(task.status)}
-                            </Badge>
-                          )}
-                        </td>
-
-                        <td className="px-4 py-3">
-                          {isEditing ? (
-                            <Input
-                              type="number"
-                              min={1}
-                              value={editForm.durationMinutes}
-                              onChange={(event) =>
-                                setEditForm((prev) =>
-                                  prev
-                                    ? {
-                                        ...prev,
-                                        durationMinutes: event.target.value,
-                                      }
-                                    : prev
-                                )
-                              }
-                            />
-                          ) : (
-                            task.durationMinutes
-                          )}
-                        </td>
-
-                        <td className="max-w-[280px] px-4 py-3 text-muted-foreground">
-                          {isEditing ? (
-                            <Textarea
-                              rows={2}
-                              value={editForm.description}
-                              onChange={(event) =>
-                                setEditForm((prev) =>
-                                  prev
-                                    ? {
-                                        ...prev,
-                                        description: event.target.value,
-                                      }
-                                    : prev
-                                )
-                              }
-                            />
-                          ) : (
-                            task.description ?? "-"
-                          )}
-                        </td>
-
-                        <td className="max-w-[240px] px-4 py-3">
-                          {isEditing ? (
-                            <Input
-                              type="url"
-                              placeholder="https://..."
-                              value={editForm.link}
-                              onChange={(event) =>
-                                setEditForm((prev) =>
-                                  prev
-                                    ? { ...prev, link: event.target.value }
-                                    : prev
-                                )
-                              }
-                            />
-                          ) : task.link ? (
-                            <a
-                              href={task.link}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="text-primary underline-offset-4 hover:underline"
-                            >
-                              Open
-                            </a>
-                          ) : (
-                            <span className="text-muted-foreground">-</span>
-                          )}
-                        </td>
-
-                        <td className="px-4 py-3">
-                          {isEditing ? (
-                            <div className="flex gap-2">
-                              <Button
-                                size="sm"
-                                onClick={() => void saveEdit(task.id)}
-                              >
-                                Save
-                              </Button>
-                              <Button size="sm" variant="outline" onClick={cancelEdit}>
-                                Cancel
-                              </Button>
-                            </div>
-                          ) : (
-                            <div className="flex gap-2">
-                              <Button size="sm" variant="outline" onClick={() => beginEdit(task)}>
-                                Edit
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="destructive"
-                                onClick={() => void handleDeleteTask(task.id)}
-                              >
-                                Delete
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() =>
-                                  void handleStatusChange(
-                                    task.id,
-                                    task.status === "in_progress"
-                                      ? "testing"
-                                      : task.status === "testing"
-                                        ? "done"
-                                        : "in_progress"
-                                  )
-                                }
-                              >
-                                Next status
-                              </Button>
-                            </div>
-                          )}
-                        </td>
-                      </tr>
-                    )
-                  })}
-              </tbody>
-            </table>
-          </div>
-        </CardContent>
-      </Card>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={closeTaskModal}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={savingTask || loadingTasks}>
+                {savingTask
+                  ? "Saving..."
+                  : taskModalMode === "create"
+                    ? "Create task"
+                    : "Save changes"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       {statusMessage ? <p className="mt-4 text-sm text-muted-foreground">{statusMessage}</p> : null}
     </AppShell>

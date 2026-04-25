@@ -59,9 +59,10 @@ export function AppShell({
       <div className="mx-auto flex h-[calc(100svh-2rem)] w-full max-w-[1600px] overflow-hidden rounded-2xl border bg-background shadow-sm md:h-[calc(100svh-3rem)]">
         <aside className="flex h-full w-full max-w-72 flex-col border-r p-4 md:p-5">
           <div className="mb-6">
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">Workspace</p>
-            <h1 className="mt-1 text-lg font-semibold">Task Tracker</h1>
-            <p className="text-sm text-muted-foreground">Placeholder title</p>
+            <h1 className="mt-1 text-lg font-semibold">Geist</h1>
+            <p className="text-xs tracking-wide text-muted-foreground uppercase">
+              Task Tracker
+            </p>
           </div>
 
           <nav className="space-y-1">
@@ -106,8 +107,12 @@ export function AppShell({
               )}
 
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium">{userName || "Signed in user"}</p>
-                <p className="truncate text-xs text-muted-foreground">{userEmail ?? "..."}</p>
+                <p className="truncate text-sm font-medium">
+                  {userName || "Signed in user"}
+                </p>
+                <p className="truncate text-xs text-muted-foreground">
+                  {userEmail ?? "..."}
+                </p>
               </div>
             </button>
 
@@ -131,7 +136,9 @@ export function AppShell({
           </div>
         </aside>
 
-        <main className="h-full flex-1 overflow-y-auto p-4 md:p-6">{children}</main>
+        <main className="h-full flex-1 overflow-y-auto p-4 md:p-6">
+          {children}
+        </main>
       </div>
     </div>
   )

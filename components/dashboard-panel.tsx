@@ -18,6 +18,7 @@ import {
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { auth, db } from "@/lib/firebase"
+import { Skeleton } from "@/components/ui/skeleton"
 
 type TaskStatus = "in_progress" | "testing" | "done"
 
@@ -322,7 +323,11 @@ export function DashboardPanel() {
       userAvatarUrl={user?.photoURL}
       onLogout={handleSignOut}
     >
-      {loadingAuth ? <p className="mb-4 text-sm">Checking auth session...</p> : null}
+      {loadingAuth ? (
+        <div className="mb-4 rounded-lg border p-4">
+          <Skeleton className="h-4 w-40" />
+        </div>
+      ) : null}
 
       <Card>
         <CardHeader className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
@@ -407,7 +412,13 @@ export function DashboardPanel() {
             <CardDescription>Most recently active dates.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            {loading ? <p className="text-sm text-muted-foreground">Loading metrics...</p> : null}
+            {loading ? (
+              <div className="space-y-2">
+                <Skeleton className="h-12 w-full" />
+                <Skeleton className="h-12 w-full" />
+                <Skeleton className="h-12 w-full" />
+              </div>
+            ) : null}
 
             {!loading && dailyMetrics.length === 0 ? (
               <p className="text-sm text-muted-foreground">No task data yet.</p>

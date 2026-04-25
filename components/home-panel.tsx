@@ -28,6 +28,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { auth, db } from "@/lib/firebase"
+import { Skeleton } from "@/components/ui/skeleton"
 
 type TaskStatus = "in_progress" | "testing" | "done"
 
@@ -576,7 +577,11 @@ export function HomePanel() {
       userAvatarUrl={user?.photoURL}
       onLogout={handleSignOut}
     >
-      {loadingAuth ? <p className="mb-4 text-sm">Checking auth session...</p> : null}
+      {loadingAuth ? (
+        <div className="mb-4 rounded-lg border p-4">
+          <Skeleton className="h-4 w-40" />
+        </div>
+      ) : null}
 
       <Card>
         <CardHeader className="flex flex-col gap-4">
@@ -690,12 +695,14 @@ export function HomePanel() {
                 </thead>
                 <tbody>
                   {loadingTasks ? (
-                    <tr>
-                      <td colSpan={6} className="px-4 py-6 text-muted-foreground">
-                        Loading tasks...
+                  Array.from({ length: 4 }).map((_, index) => (
+                    <tr key={`loading-row-${index}`} className="border-t">
+                      <td colSpan={6} className="px-4 py-3">
+                        <Skeleton className="h-8 w-full" />
                       </td>
                     </tr>
-                  ) : null}
+                  ))
+                ) : null}
 
                   {!loadingTasks && filteredTasks.length === 0 ? (
                     <tr>

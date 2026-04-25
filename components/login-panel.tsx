@@ -15,6 +15,7 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { auth, googleProvider } from "@/lib/firebase"
+import { Skeleton } from "@/components/ui/skeleton"
 
 export function LoginPanel() {
   const router = useRouter()
@@ -70,7 +71,10 @@ export function LoginPanel() {
 
         <CardContent className="space-y-3">
           {loadingAuth ? (
-            <p className="text-sm">Checking auth session...</p>
+            <div className="space-y-3">
+              <Skeleton className="h-12 w-full" />
+              <Skeleton className="h-10 w-full" />
+            </div>
           ) : (
             <>
               <Button onClick={handleGoogleSignInPopup} className="w-full" size="lg">

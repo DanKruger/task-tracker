@@ -19,6 +19,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { auth, db } from "@/lib/firebase"
+import { Skeleton } from "@/components/ui/skeleton"
 
 type TaskStatus = "in_progress" | "testing" | "done"
 
@@ -579,7 +580,11 @@ export function PresentationsPanel() {
       userAvatarUrl={user?.photoURL}
       onLogout={handleSignOut}
     >
-      {loadingAuth ? <p className="mb-4 text-sm">Checking auth session...</p> : null}
+      {loadingAuth ? (
+        <div className="mb-4 rounded-lg border p-4">
+          <Skeleton className="h-4 w-40" />
+        </div>
+      ) : null}
 
       <Card>
         <CardHeader>
@@ -670,11 +675,13 @@ export function PresentationsPanel() {
               </thead>
               <tbody>
                 {loadingData ? (
-                  <tr>
-                    <td colSpan={3} className="px-4 py-6 text-muted-foreground">
-                      Loading sprint data...
-                    </td>
-                  </tr>
+                  Array.from({ length: 4 }).map((_, index) => (
+                    <tr key={`loading-sprint-${index}`} className="border-t">
+                      <td colSpan={3} className="px-4 py-3">
+                        <Skeleton className="h-8 w-full" />
+                      </td>
+                    </tr>
+                  ))
                 ) : (
                   metrics.byDay.map((day) => (
                     <tr key={day.date} className="border-t">

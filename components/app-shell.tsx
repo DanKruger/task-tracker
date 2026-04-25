@@ -5,6 +5,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import {
   ChartPieSlice,
+  GearSix,
   House,
   PresentationChart,
   SignOut,
@@ -25,6 +26,7 @@ const navItems = [
   { href: "/home", label: "Home", icon: House },
   { href: "/dashboard", label: "Dashboard", icon: ChartPieSlice },
   { href: "/presentations", label: "Presentations", icon: PresentationChart },
+  { href: "/settings", label: "Settings", icon: GearSix },
 ]
 
 function initialsFromUser(name?: string | null, email?: string | null) {

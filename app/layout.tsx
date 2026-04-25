@@ -3,6 +3,7 @@ import { Geist_Mono, Inter, Lora } from "next/font/google"
 import "./globals.css"
 import { AuthSessionSync } from "@/components/auth-session-sync"
 import { ThemeProvider } from "@/components/theme-provider"
+import { UserSettingsProvider } from "@/components/user-settings-provider"
 import { cn } from "@/lib/utils"
 
 const loraHeading = Lora({ subsets: ["latin"], variable: "--font-heading" })
@@ -32,8 +33,10 @@ export default function RootLayout({
     >
       <body>
         <ThemeProvider>
-          <AuthSessionSync />
-          {children}
+          <UserSettingsProvider>
+            <AuthSessionSync />
+            {children}
+          </UserSettingsProvider>
         </ThemeProvider>
       </body>
     </html>

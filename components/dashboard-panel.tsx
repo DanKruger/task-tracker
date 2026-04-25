@@ -25,10 +25,9 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import { Label } from "@/components/ui/label"
-import { Switch } from "@/components/ui/switch"
 import { auth, db } from "@/lib/firebase"
 import { Skeleton } from "@/components/ui/skeleton"
+import { useUserSettings } from "@/components/user-settings-provider"
 
 type TaskStatus = "in_progress" | "testing" | "done"
 
@@ -119,6 +118,7 @@ function heatLevelClass(level: number) {
 
 export function DashboardPanel() {
   const router = useRouter()
+  const { timeUnit } = useUserSettings()
 
   const [user, setUser] = useState<User | null>(null)
   const [loadingAuth, setLoadingAuth] = useState(true)
@@ -126,7 +126,6 @@ export function DashboardPanel() {
   const [statusMessage, setStatusMessage] = useState<string | null>(null)
   const [tasks, setTasks] = useState<TaskWithDate[]>([])
   const [dailyMetrics, setDailyMetrics] = useState<DayMetric[]>([])
-  const [timeUnit, setTimeUnit] = useState<TimeUnit>("minutes")
   const [heatMode, setHeatMode] = useState<HeatMode>("count")
 
   useEffect(() => {
@@ -343,24 +342,10 @@ export function DashboardPanel() {
         <CardHeader className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div>
             <CardTitle>Dashboard controls</CardTitle>
-            <CardDescription>Adjust units and heatmap mode.</CardDescription>
+            <CardDescription>Heatmap mode controls.</CardDescription>
           </div>
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:gap-6">
-            <div className="space-y-2">
-              <Label htmlFor="time-unit-switch">Show time as</Label>
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">Min</span>
-                <Switch
-                  id="time-unit-switch"
-                  checked={timeUnit === "hours"}
-                  onCheckedChange={(checked) =>
-                    setTimeUnit(checked ? "hours" : "minutes")
-                  }
-                />
-                <span className="text-xs text-muted-foreground">Hours</span>
-              </div>
-            </div>
-
+          <div className="text-xs text-muted-foreground">
+            Time unit is set in Settings.
           </div>
         </CardHeader>
       </Card>

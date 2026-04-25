@@ -39,6 +39,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { auth, db } from "@/lib/firebase"
 import { Skeleton } from "@/components/ui/skeleton"
+import { useUserSettings } from "@/components/user-settings-provider"
 
 type TaskStatus = "in_progress" | "testing" | "done"
 
@@ -171,6 +172,7 @@ function generateTaskId() {
 
 export function HomePanel() {
   const router = useRouter()
+  const { timeUnit } = useUserSettings()
   const today = todayIsoDate()
   const currentMonth = today.slice(0, 7)
 
@@ -196,6 +198,7 @@ export function HomePanel() {
   const [taskModalMode, setTaskModalMode] = useState<"create" | "edit">("create")
   const [taskForm, setTaskForm] = useState<TaskFormState>(emptyTaskForm)
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null)
+  const [viewTask, setViewTask] = useState<TaskItem | null>(null)
 
   const selectedDateSummary = calendarSummaries[selectedDate]
 
@@ -226,6 +229,10 @@ export function HomePanel() {
     () => tasks.reduce((sum, task) => sum + task.durationMinutes, 0),
     [tasks]
   )
+  const totalDurationLabel =
+    timeUnit === "hours"
+      ? `${(totalMinutes / 60).toFixed(2)} total hour(s)`
+      : `${totalMinutes} total minute(s)`
 
   const filteredTasks = useMemo(() => {
     const query = searchQuery.trim().toLowerCase()
@@ -437,6 +444,10 @@ export function HomePanel() {
     setTaskForm(emptyTaskForm)
   }
 
+  function openTaskViewModal(task: TaskItem) {
+    setViewTask(task)
+  }
+
   function goToPreviousMonth() {
     const [yearRaw, monthRaw] = calendarMonth.split("-")
     const date = new Date(Number(yearRaw), Number(monthRaw) - 2, 1)
@@ -520,14 +531,28 @@ export function HomePanel() {
 
     const nextTasks = tasks.map((task) =>
       task.id === activeTaskId
-        ? {
-            ...task,
-            title: trimmedTitle,
-            status: taskForm.status,
-            durationMinutes: parsedDuration,
-            ...(trimmedDescription ? { description: trimmedDescription } : {}),
-            ...(trimmedLink ? { link: trimmedLink } : {}),
-          }
+        ? (() => {
+            const updated: TaskItem = {
+              ...task,
+              title: trimmedTitle,
+              status: taskForm.status,
+              durationMinutes: parsedDuration,
+            }
+
+            if (trimmedDescription) {
+              updated.description = trimmedDescription
+            } else {
+              delete updated.description
+            }
+
+            if (trimmedLink) {
+              updated.link = trimmedLink
+            } else {
+              delete updated.link
+            }
+
+            return updated
+          })()
         : task
     )
 
@@ -613,7 +638,7 @@ export function HomePanel() {
               <CardTitle>Tasks</CardTitle>
               <CardDescription>
                 {viewMode === "list"
-                  ? `${tasks.length} task(s) for ${selectedDate} • ${totalMinutes} total minute(s)`
+                  ? `${tasks.length} task(s) for ${selectedDate} • ${totalDurationLabel}`
                   : `Calendar view for ${formatMonthLabel(calendarMonth)}`}
               </CardDescription>
             </div>
@@ -716,7 +741,9 @@ export function HomePanel() {
                   <tr>
                     <th className="px-4 py-3 font-medium">Task</th>
                     <th className="px-4 py-3 font-medium">Status</th>
-                    <th className="px-4 py-3 font-medium">Time (min)</th>
+                    <th className="px-4 py-3 font-medium">
+                      {timeUnit === "hours" ? "Time (hrs)" : "Time (min)"}
+                    </th>
                     <th className="px-4 py-3 font-medium">Description</th>
                     <th className="px-4 py-3 font-medium">Link</th>
                     <th className="px-4 py-3 font-medium">Actions</th>
@@ -743,14 +770,22 @@ export function HomePanel() {
 
                   {!loadingTasks &&
                     filteredTasks.map((task) => (
-                      <tr key={task.id} className="border-t align-top">
+                      <tr
+                        key={task.id}
+                        className="border-t align-top transition-colors hover:bg-muted/30"
+                        onClick={() => openTaskViewModal(task)}
+                      >
                         <td className="px-4 py-3 font-medium">{task.title}</td>
                         <td className="px-4 py-3">
                           <Badge variant={statusBadgeVariant(task.status)}>
                             {displayStatus(task.status)}
                           </Badge>
                         </td>
-                        <td className="px-4 py-3">{task.durationMinutes}</td>
+                        <td className="px-4 py-3">
+                          {timeUnit === "hours"
+                            ? (task.durationMinutes / 60).toFixed(2)
+                            : task.durationMinutes}
+                        </td>
                         <td className="max-w-[280px] px-4 py-3 text-muted-foreground">
                           {task.description ?? "-"}
                         </td>
@@ -761,6 +796,7 @@ export function HomePanel() {
                               target="_blank"
                               rel="noreferrer"
                               className="text-primary underline-offset-4 hover:underline"
+                              onClick={(event) => event.stopPropagation()}
                             >
                               Open
                             </a>
@@ -773,7 +809,10 @@ export function HomePanel() {
                             <Button
                               size="sm"
                               variant="outline"
-                              onClick={() => openEditTaskModal(task)}
+                              onClick={(event) => {
+                                event.stopPropagation()
+                                openEditTaskModal(task)
+                              }}
                             >
                               <NotePencil className="size-4" />
                               Edit
@@ -781,7 +820,10 @@ export function HomePanel() {
                             <Button
                               size="sm"
                               variant="destructive"
-                              onClick={() => void handleDeleteTask(task.id)}
+                              onClick={(event) => {
+                                event.stopPropagation()
+                                void handleDeleteTask(task.id)
+                              }}
                             >
                               <Trash className="size-4" />
                               Delete
@@ -789,7 +831,8 @@ export function HomePanel() {
                             <Button
                               size="sm"
                               variant="ghost"
-                              onClick={() =>
+                              onClick={(event) => {
+                                event.stopPropagation()
                                 void handleStatusChange(
                                   task.id,
                                   task.status === "in_progress"
@@ -798,7 +841,7 @@ export function HomePanel() {
                                       ? "done"
                                       : "in_progress"
                                 )
-                              }
+                              }}
                             >
                               <ArrowsClockwise className="size-4" />
                               Next status
@@ -869,7 +912,11 @@ export function HomePanel() {
                     {summary ? (
                       <div className="mt-1 text-xs text-muted-foreground">
                         <p>{summary.count} task(s)</p>
-                        <p>{summary.minutes} min</p>
+                        <p>
+                          {timeUnit === "hours"
+                            ? `${(summary.minutes / 60).toFixed(2)} h`
+                            : `${summary.minutes} min`}
+                        </p>
                       </div>
                     ) : null}
                   </button>
@@ -880,7 +927,9 @@ export function HomePanel() {
             {selectedDateSummary ? (
               <p className="mt-4 text-sm text-muted-foreground">
                 Selected {selectedDate}: {selectedDateSummary.count} task(s),{" "}
-                {selectedDateSummary.minutes} minute(s)
+                {timeUnit === "hours"
+                  ? `${(selectedDateSummary.minutes / 60).toFixed(2)} hour(s)`
+                  : `${selectedDateSummary.minutes} minute(s)`}
               </p>
             ) : (
               <p className="mt-4 text-sm text-muted-foreground">
@@ -890,6 +939,80 @@ export function HomePanel() {
           </CardContent>
         )}
       </Card>
+
+      <Dialog open={Boolean(viewTask)} onOpenChange={(open) => !open && setViewTask(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{viewTask?.title ?? "Task details"}</DialogTitle>
+            <DialogDescription>
+              Detailed task view for {selectedDate}
+            </DialogDescription>
+          </DialogHeader>
+
+          {viewTask ? (
+            <div className="space-y-4">
+              <div className="flex items-center gap-2">
+                <Badge variant={statusBadgeVariant(viewTask.status)}>
+                  {displayStatus(viewTask.status)}
+                </Badge>
+                <span className="text-sm text-muted-foreground">
+                  {timeUnit === "hours"
+                    ? `${(viewTask.durationMinutes / 60).toFixed(2)} hour(s)`
+                    : `${viewTask.durationMinutes} minute(s)`}
+                </span>
+              </div>
+
+              <div className="rounded-lg border p-3">
+                <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                  Description
+                </p>
+                <p className="mt-1 text-sm">
+                  {viewTask.description?.trim() || "No description provided."}
+                </p>
+              </div>
+
+              <div className="rounded-lg border p-3">
+                <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                  Link
+                </p>
+                {viewTask.link ? (
+                  <p className="mt-1 truncate text-sm text-muted-foreground">
+                    {viewTask.link}
+                  </p>
+                ) : (
+                  <p className="mt-1 text-sm text-muted-foreground">No link provided.</p>
+                )}
+              </div>
+
+              <p className="text-xs text-muted-foreground">
+                Created: {new Date(viewTask.createdAt).toLocaleString()}
+              </p>
+            </div>
+          ) : null}
+
+          <DialogFooter>
+            {viewTask?.link ? (
+              <Button asChild variant="secondary">
+                <a href={viewTask.link} target="_blank" rel="noreferrer">
+                  Open
+                </a>
+              </Button>
+            ) : null}
+            <Button variant="outline" onClick={() => setViewTask(null)}>
+              Close
+            </Button>
+            <Button
+              onClick={() => {
+                if (!viewTask) return
+                setViewTask(null)
+                openEditTaskModal(viewTask)
+              }}
+            >
+              Edit task
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={taskModalOpen} onOpenChange={setTaskModalOpen}>
         <DialogContent>

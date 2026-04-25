@@ -27,6 +27,7 @@ import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { auth, db } from "@/lib/firebase"
 import { Skeleton } from "@/components/ui/skeleton"
+import { useUserSettings } from "@/components/user-settings-provider"
 
 type TaskStatus = "in_progress" | "testing" | "done"
 
@@ -51,7 +52,6 @@ type TaskDayDoc = {
 type SprintPreset = 7 | 14
 
 type DeckSettings = {
-  timeUnit: "minutes" | "hours"
   includeDescriptions: boolean
   includeLinks: boolean
   includeSummarySlide: boolean
@@ -105,7 +105,7 @@ function chunkArray<T>(items: T[], chunkSize: number) {
   return chunks
 }
 
-function formatDuration(minutes: number, unit: DeckSettings["timeUnit"]) {
+function formatDuration(minutes: number, unit: "minutes" | "hours") {
   if (unit === "hours") {
     return (minutes / 60).toFixed(2)
   }
@@ -114,6 +114,7 @@ function formatDuration(minutes: number, unit: DeckSettings["timeUnit"]) {
 
 export function PresentationsPanel() {
   const router = useRouter()
+  const { timeUnit } = useUserSettings()
 
   const [user, setUser] = useState<User | null>(null)
   const [loadingAuth, setLoadingAuth] = useState(true)
@@ -126,7 +127,6 @@ export function PresentationsPanel() {
   const [tasks, setTasks] = useState<TaskWithDate[]>([])
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [deckSettings, setDeckSettings] = useState<DeckSettings>({
-    timeUnit: "minutes",
     includeDescriptions: true,
     includeLinks: true,
     includeSummarySlide: true,
@@ -171,11 +171,11 @@ export function PresentationsPanel() {
   }, [rangeDates, tasks])
 
   const totalTimeLabel = useMemo(() => {
-    if (deckSettings.timeUnit === "hours") {
+    if (timeUnit === "hours") {
       return `${(metrics.totalMinutes / 60).toFixed(2)} h`
     }
     return `${metrics.totalMinutes} min`
-  }, [deckSettings.timeUnit, metrics.totalMinutes])
+  }, [metrics.totalMinutes, timeUnit])
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (nextUser) => {
@@ -315,9 +315,9 @@ export function PresentationsPanel() {
           { label: "Total tasks", value: String(metrics.totalTasks) },
           {
             label:
-              deckSettings.timeUnit === "hours" ? "Total hours" : "Total minutes",
+              timeUnit === "hours" ? "Total hours" : "Total minutes",
             value:
-              deckSettings.timeUnit === "hours"
+              timeUnit === "hours"
                 ? (metrics.totalMinutes / 60).toFixed(2)
                 : String(metrics.totalMinutes),
           },
@@ -433,7 +433,7 @@ export function PresentationsPanel() {
           {
             text: formatDuration(
               Number(task.durationMinutes) || 0,
-              deckSettings.timeUnit
+              timeUnit
             ),
           },
           ...(deckSettings.includeDescriptions
@@ -457,8 +457,8 @@ export function PresentationsPanel() {
             color: "0F172A",
           })
           daySlide.addText(
-            `${dayTasks.length} task(s) • ${
-              deckSettings.timeUnit === "hours"
+              `${dayTasks.length} task(s) • ${
+              timeUnit === "hours"
                 ? `${(
                     dayTasks.reduce(
                       (sum, task) => sum + (Number(task.durationMinutes) || 0),
@@ -492,7 +492,7 @@ export function PresentationsPanel() {
                   options: { bold: true, color: "FFFFFF", fill: { color: "1D4ED8" } },
                 },
                 {
-                  text: deckSettings.timeUnit === "hours" ? "Time (hrs)" : "Time (min)",
+                  text: timeUnit === "hours" ? "Time (hrs)" : "Time (min)",
                   options: { bold: true, color: "FFFFFF", fill: { color: "1D4ED8" } },
                 },
                 ...(deckSettings.includeDescriptions
@@ -667,7 +667,7 @@ export function PresentationsPanel() {
             </div>
             <div className="rounded-lg border p-4">
               <p className="text-sm text-muted-foreground">
-                {deckSettings.timeUnit === "hours" ? "Hours" : "Minutes"}
+                {timeUnit === "hours" ? "Hours" : "Minutes"}
               </p>
               <p className="mt-1 text-2xl font-semibold">{totalTimeLabel}</p>
             </div>
@@ -684,7 +684,9 @@ export function PresentationsPanel() {
                 <tr>
                   <th className="px-4 py-3 font-medium">Date</th>
                   <th className="px-4 py-3 font-medium">Tasks</th>
-                  <th className="px-4 py-3 font-medium">Minutes</th>
+                  <th className="px-4 py-3 font-medium">
+                    {timeUnit === "hours" ? "Hours" : "Minutes"}
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -701,7 +703,11 @@ export function PresentationsPanel() {
                     <tr key={day.date} className="border-t">
                       <td className="px-4 py-3">{day.date}</td>
                       <td className="px-4 py-3">{day.count}</td>
-                      <td className="px-4 py-3">{day.minutes}</td>
+                      <td className="px-4 py-3">
+                        {timeUnit === "hours"
+                          ? (day.minutes / 60).toFixed(2)
+                          : day.minutes}
+                      </td>
                     </tr>
                   ))
                 )}
@@ -721,22 +727,12 @@ export function PresentationsPanel() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-5">
-              <div className="space-y-2">
-                <Label htmlFor="setting-time-unit">Time display</Label>
-                <select
-                  id="setting-time-unit"
-                  value={deckSettings.timeUnit}
-                  onChange={(event) =>
-                    setDeckSettings((prev) => ({
-                      ...prev,
-                      timeUnit: event.target.value as DeckSettings["timeUnit"],
-                    }))
-                  }
-                  className="border-input focus-visible:border-ring focus-visible:ring-ring/50 h-9 w-full rounded-md border bg-transparent px-3 text-sm outline-none focus-visible:ring-[3px]"
-                >
-                  <option value="minutes">Minutes</option>
-                  <option value="hours">Hours</option>
-                </select>
+              <div className="rounded-md border p-3 text-sm text-muted-foreground">
+                Time display is controlled globally in Settings and currently uses{" "}
+                <span className="font-medium text-foreground">
+                  {timeUnit === "hours" ? "hours" : "minutes"}
+                </span>
+                .
               </div>
 
               <div className="grid gap-4 sm:grid-cols-2">

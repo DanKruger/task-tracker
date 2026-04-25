@@ -110,10 +110,10 @@ function formatDurationValue(minutes: number, unit: TimeUnit) {
 
 function heatLevelClass(level: number) {
   if (level <= 0) return "bg-muted/40"
-  if (level === 1) return "bg-emerald-200 dark:bg-emerald-900/40"
-  if (level === 2) return "bg-emerald-300 dark:bg-emerald-800/60"
-  if (level === 3) return "bg-emerald-500 dark:bg-emerald-700"
-  return "bg-emerald-700 dark:bg-emerald-500"
+  if (level === 1) return "bg-primary/20"
+  if (level === 2) return "bg-primary/35"
+  if (level === 3) return "bg-primary/55"
+  return "bg-primary/80"
 }
 
 export function DashboardPanel() {

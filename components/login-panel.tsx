@@ -1,7 +1,11 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { onAuthStateChanged, signInWithPopup, signInWithRedirect } from "firebase/auth"
+import {
+  onAuthStateChanged,
+  signInWithPopup,
+  signInWithRedirect,
+} from "firebase/auth"
 import { RocketLaunch } from "@phosphor-icons/react"
 import { FcGoogle } from "react-icons/fc"
 import { useRouter } from "next/navigation"
@@ -58,18 +62,18 @@ export function LoginPanel() {
   return (
     <div className="relative flex min-h-svh items-center justify-center overflow-hidden bg-muted/20 p-6">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,hsl(var(--primary)/0.14),transparent_42%),radial-gradient(circle_at_bottom_right,hsl(var(--primary)/0.09),transparent_45%)]" />
-
       <Card className="relative z-10 w-full max-w-md">
         <CardHeader className="space-y-2">
           <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-            Welcome back
+            Geist
           </p>
           <CardTitle className="flex items-center gap-2 text-2xl">
             <RocketLaunch className="size-6" weight="duotone" />
             Task Tracker
           </CardTitle>
           <CardDescription>
-            Sign in to view your tasks, dashboard metrics, and sprint presentations.
+            Sign in to view your tasks, dashboard metrics, and sprint
+            presentations.
           </CardDescription>
         </CardHeader>
 
@@ -81,7 +85,11 @@ export function LoginPanel() {
             </div>
           ) : (
             <>
-              <Button onClick={handleGoogleSignInPopup} className="w-full" size="lg">
+              <Button
+                onClick={handleGoogleSignInPopup}
+                className="w-full"
+                size="lg"
+              >
                 <FcGoogle className="size-4" />
                 Login with Google
               </Button>
@@ -95,9 +103,14 @@ export function LoginPanel() {
             </>
           )}
 
-          {status ? <p className="text-sm text-muted-foreground">{status}</p> : null}
+          {status ? (
+            <p className="text-sm text-muted-foreground">{status}</p>
+          ) : null}
         </CardContent>
       </Card>
+      <span className="fixed inset-x-0 bottom-3 z-20 px-4 text-center text-xs text-muted-foreground">
+        Copyright &copy; 2026 Daniel Kruger. All Rights Reserved.
+      </span>
     </div>
   )
 }

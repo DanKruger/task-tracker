@@ -120,18 +120,18 @@ export function AppShell({
                       key={item.href}
                       href={item.href}
                       onClick={() => setMobileNavOpen(false)}
-                      className={cn(
-                        "flex items-center gap-2 rounded-xl px-3 py-2 text-sm transition-colors",
-                        isActive
-                          ? "bg-primary text-primary-foreground"
-                          : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
-                      )}
-                    >
-                      <item.icon className="size-4" weight="duotone" />
-                      {item.label}
-                    </Link>
-                  )
-                })}
+                    className={cn(
+                      "flex items-center gap-2 rounded-xl px-3 py-2 text-sm transition-colors",
+                      isActive
+                        ? "bg-primary text-primary-foreground"
+                        : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+                    )}
+                  >
+                    <item.icon className="size-4" weight={isActive ? "fill" : "duotone"} />
+                    {item.label}
+                  </Link>
+                )
+              })}
               </nav>
 
               <div className="mt-auto" ref={menuRef}>

@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation"
 import {
   CalendarDots,
   ChartBar,
+  ChartPieSlice,
   CheckCircle,
   Clock,
   Fire,
@@ -341,7 +342,10 @@ export function DashboardPanel() {
       <Card>
         <CardHeader className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div>
-            <CardTitle>Dashboard controls</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <ChartPieSlice className="size-5" />
+              Dashboard controls
+            </CardTitle>
             <CardDescription>Heatmap mode controls.</CardDescription>
           </div>
           <div className="text-xs text-muted-foreground">

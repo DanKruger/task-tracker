@@ -644,7 +644,10 @@ export function HomePanel() {
         <CardHeader className="flex flex-col gap-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <CardTitle>Tasks</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                <ListBullets className="size-5" />
+                Tasks
+              </CardTitle>
               <CardDescription>
                 {viewMode === "list"
                   ? `${tasks.length} task(s) for ${selectedDate} • ${totalDurationLabel}`

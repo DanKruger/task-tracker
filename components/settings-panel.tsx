@@ -92,22 +92,25 @@ export function SettingsPanel() {
             </div>
           ) : (
             <div className="max-w-md space-y-5">
-              <div className="space-y-3">
-                <Label htmlFor="time-unit-setting">Time display unit</Label>
-                <select
-                  id="time-unit-setting"
-                  value={timeUnit}
-                  onChange={(event) =>
-                    void handleTimeUnitChange(event.target.value as TimeDisplayUnit)
-                  }
-                  className="border-input focus-visible:border-ring focus-visible:ring-ring/50 h-9 w-full rounded-md border bg-transparent px-3 text-sm outline-none focus-visible:ring-[3px]"
-                >
-                  <option value="minutes">Minutes</option>
-                  <option value="hours">Hours</option>
-                </select>
-                <p className="text-xs text-muted-foreground">
-                  This controls time display in Home, Dashboard, and Presentations.
-                </p>
+              <div className="flex items-center justify-between rounded-md border p-3">
+                <div>
+                  <Label htmlFor="time-unit-setting">Time display unit</Label>
+                  <p className="text-xs text-muted-foreground">
+                    This controls time display in Home, Dashboard, and Presentations.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground">Min</span>
+                  <Switch
+                    id="time-unit-setting"
+                    checked={timeUnit === "hours"}
+                    onCheckedChange={(checked) =>
+                      void handleTimeUnitChange(checked ? "hours" : "minutes")
+                    }
+                    aria-label="Toggle time unit between minutes and hours"
+                  />
+                  <span className="text-xs text-muted-foreground">Hrs</span>
+                </div>
               </div>
 
               <div className="flex items-center justify-between rounded-md border p-3">

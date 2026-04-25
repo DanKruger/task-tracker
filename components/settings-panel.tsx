@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react"
 import { onAuthStateChanged, signOut, type User } from "firebase/auth"
-import { GearSix } from "@phosphor-icons/react"
+import { GearSix, Moon, Sun } from "@phosphor-icons/react"
 import { useRouter } from "next/navigation"
+import { useTheme } from "next-themes"
 
 import { AppShell } from "@/components/app-shell"
 import {
@@ -15,6 +16,7 @@ import {
 } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Switch } from "@/components/ui/switch"
 import {
   type TimeDisplayUnit,
   useUserSettings,
@@ -26,6 +28,7 @@ export function SettingsPanel() {
   const [user, setUser] = useState<User | null>(null)
   const [loadingAuth, setLoadingAuth] = useState(true)
   const [statusMessage, setStatusMessage] = useState<string | null>(null)
+  const { resolvedTheme, setTheme } = useTheme()
 
   const { timeUnit, loadingSettings, updateTimeUnit } = useUserSettings()
 
@@ -85,24 +88,46 @@ export function SettingsPanel() {
             <div className="space-y-2">
               <Skeleton className="h-4 w-40" />
               <Skeleton className="h-9 w-64" />
+              <Skeleton className="mt-4 h-14 w-64" />
             </div>
           ) : (
-            <div className="max-w-md space-y-3">
-              <Label htmlFor="time-unit-setting">Time display unit</Label>
-              <select
-                id="time-unit-setting"
-                value={timeUnit}
-                onChange={(event) =>
-                  void handleTimeUnitChange(event.target.value as TimeDisplayUnit)
-                }
-                className="border-input focus-visible:border-ring focus-visible:ring-ring/50 h-9 w-full rounded-md border bg-transparent px-3 text-sm outline-none focus-visible:ring-[3px]"
-              >
-                <option value="minutes">Minutes</option>
-                <option value="hours">Hours</option>
-              </select>
-              <p className="text-xs text-muted-foreground">
-                This controls time display in Home, Dashboard, and Presentations.
-              </p>
+            <div className="max-w-md space-y-5">
+              <div className="space-y-3">
+                <Label htmlFor="time-unit-setting">Time display unit</Label>
+                <select
+                  id="time-unit-setting"
+                  value={timeUnit}
+                  onChange={(event) =>
+                    void handleTimeUnitChange(event.target.value as TimeDisplayUnit)
+                  }
+                  className="border-input focus-visible:border-ring focus-visible:ring-ring/50 h-9 w-full rounded-md border bg-transparent px-3 text-sm outline-none focus-visible:ring-[3px]"
+                >
+                  <option value="minutes">Minutes</option>
+                  <option value="hours">Hours</option>
+                </select>
+                <p className="text-xs text-muted-foreground">
+                  This controls time display in Home, Dashboard, and Presentations.
+                </p>
+              </div>
+
+              <div className="flex items-center justify-between rounded-md border p-3">
+                <div>
+                  <Label htmlFor="theme-mode-setting">Dark mode</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Switch between light and dark theme.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Sun className="size-4 text-muted-foreground" />
+                  <Switch
+                    id="theme-mode-setting"
+                    checked={resolvedTheme === "dark"}
+                    onCheckedChange={(checked) => setTheme(checked ? "dark" : "light")}
+                    aria-label="Toggle dark mode"
+                  />
+                  <Moon className="size-4 text-muted-foreground" />
+                </div>
+              </div>
             </div>
           )}
         </CardContent>

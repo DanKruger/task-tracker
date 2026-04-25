@@ -84,9 +84,18 @@ export function AppShell({
                 Task Tracker
               </p>
             </div>
-            <div className="flex size-9 items-center justify-center rounded-full border bg-muted text-xs font-semibold text-muted-foreground">
-              {initials}
-            </div>
+            {userAvatarUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={userAvatarUrl}
+                alt="User avatar"
+                className="size-9 rounded-full border object-cover"
+              />
+            ) : (
+              <div className="flex size-9 items-center justify-center rounded-full border bg-muted text-xs font-semibold text-muted-foreground">
+                {initials}
+              </div>
+            )}
           </header>
 
           <div className="relative flex min-h-0 flex-1">

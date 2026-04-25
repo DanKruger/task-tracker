@@ -604,7 +604,7 @@ export function PresentationsPanel() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          <div className="grid gap-4 md:grid-cols-4">
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <div className="space-y-2">
               <Label htmlFor="preset-days">Sprint preset</Label>
               <select
@@ -678,8 +678,8 @@ export function PresentationsPanel() {
             </div>
           </div>
 
-          <div className="rounded-lg border">
-            <table className="w-full text-sm">
+          <div className="overflow-x-auto rounded-lg border">
+            <table className="w-full min-w-[520px] text-sm">
               <thead className="bg-muted/40 text-left">
                 <tr>
                   <th className="px-4 py-3 font-medium">Date</th>
@@ -719,7 +719,7 @@ export function PresentationsPanel() {
 
       {settingsOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <Card className="w-full max-w-2xl">
+          <Card className="max-h-[90svh] w-full max-w-2xl overflow-y-auto">
             <CardHeader>
               <CardTitle>Slide generation settings</CardTitle>
               <CardDescription>

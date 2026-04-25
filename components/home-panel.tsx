@@ -87,6 +87,15 @@ const statusOptions: Array<{ value: TaskStatus; label: string }> = [
   { value: "testing", label: "Testing" },
   { value: "done", label: "Done" },
 ]
+const weekdayHeaders = [
+  { short: "S", full: "Sun" },
+  { short: "M", full: "Mon" },
+  { short: "T", full: "Tue" },
+  { short: "W", full: "Wed" },
+  { short: "T", full: "Thu" },
+  { short: "F", full: "Fri" },
+  { short: "S", full: "Sat" },
+]
 
 const emptyTaskForm: TaskFormState = {
   title: "",
@@ -633,7 +642,7 @@ export function HomePanel() {
 
       <Card>
         <CardHeader className="flex flex-col gap-4">
-          <div className="flex items-start justify-between gap-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <CardTitle>Tasks</CardTitle>
               <CardDescription>
@@ -642,7 +651,7 @@ export function HomePanel() {
                   : `Calendar view for ${formatMonthLabel(calendarMonth)}`}
               </CardDescription>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2 sm:justify-end">
               <Button
                 type="button"
                 size="sm"
@@ -669,7 +678,7 @@ export function HomePanel() {
           </div>
 
           {viewMode === "list" ? (
-            <div className="grid gap-3 md:grid-cols-4">
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               <div className="space-y-2">
                 <Label htmlFor="task-date">Date</Label>
                 <Input
@@ -735,8 +744,101 @@ export function HomePanel() {
 
         {viewMode === "list" ? (
           <CardContent className="pt-6">
-            <div className="overflow-x-auto rounded-lg border">
-              <table className="w-full min-w-[980px] text-sm">
+            <div className="space-y-3 md:hidden">
+              {loadingTasks ? (
+                Array.from({ length: 3 }).map((_, index) => (
+                  <div key={`loading-mobile-task-${index}`} className="rounded-lg border p-3">
+                    <Skeleton className="h-20 w-full" />
+                  </div>
+                ))
+              ) : null}
+
+              {!loadingTasks && filteredTasks.length === 0 ? (
+                <div className="rounded-lg border p-4 text-sm text-muted-foreground">
+                  No tasks match current filters.
+                </div>
+              ) : null}
+
+              {!loadingTasks &&
+                filteredTasks.map((task) => (
+                  <div
+                    key={task.id}
+                    className="space-y-3 rounded-lg border p-3"
+                    onClick={() => openTaskViewModal(task)}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <p className="font-medium">{task.title}</p>
+                      <Badge variant={statusBadgeVariant(task.status)}>
+                        {displayStatus(task.status)}
+                      </Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {timeUnit === "hours"
+                        ? `${(task.durationMinutes / 60).toFixed(2)} hour(s)`
+                        : `${task.durationMinutes} minute(s)`}
+                    </p>
+                    {task.description ? (
+                      <p className="text-sm text-muted-foreground">{task.description}</p>
+                    ) : null}
+                    {task.link ? (
+                      <a
+                        href={task.link}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-sm text-primary underline-offset-4 hover:underline"
+                        onClick={(event) => event.stopPropagation()}
+                      >
+                        Open
+                      </a>
+                    ) : null}
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          openEditTaskModal(task)
+                        }}
+                      >
+                        <NotePencil className="size-4" />
+                        Edit
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          void handleDeleteTask(task.id)
+                        }}
+                      >
+                        <Trash className="size-4" />
+                        Delete
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          void handleStatusChange(
+                            task.id,
+                            task.status === "in_progress"
+                              ? "testing"
+                              : task.status === "testing"
+                                ? "done"
+                                : "in_progress"
+                          )
+                        }}
+                      >
+                        <ArrowsClockwise className="size-4" />
+                        Next status
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+            </div>
+
+            <div className="hidden overflow-x-auto rounded-lg border md:block">
+              <table className="w-full min-w-[920px] text-sm">
                 <thead className="bg-muted/40 text-left">
                   <tr>
                     <th className="px-4 py-3 font-medium">Task</th>
@@ -859,7 +961,7 @@ export function HomePanel() {
             <div className="mb-4 flex items-center justify-between">
               <Button variant="outline" size="sm" onClick={goToPreviousMonth}>
                 <CaretLeft className="size-4" />
-                Previous
+                <span className="hidden sm:inline">Previous</span>
               </Button>
               <p className="text-sm font-medium">{formatMonthLabel(calendarMonth)}</p>
               <Button
@@ -868,60 +970,72 @@ export function HomePanel() {
                 onClick={goToNextMonth}
                 disabled={calendarMonth >= currentMonth}
               >
-                Next
+                <span className="hidden sm:inline">Next</span>
                 <CaretRight className="size-4" />
               </Button>
             </div>
 
-            <div className="grid grid-cols-7 gap-2 text-xs text-muted-foreground">
-              {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
-                <div key={day} className="px-2 py-1 font-medium">
-                  {day}
+            <div className="overflow-x-auto pb-1">
+              <div className="min-w-[560px]">
+                <div className="grid grid-cols-7 gap-2 text-xs text-muted-foreground">
+                  {weekdayHeaders.map((day, index) => (
+                    <div key={`${day.full}-${index}`} className="px-2 py-1 font-medium">
+                      <span className="sm:hidden">{day.short}</span>
+                      <span className="hidden sm:inline">{day.full}</span>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
 
-            <div className="mt-1 grid grid-cols-7 gap-2">
-              {calendarGrid.map((cell, index) => {
-                if (!cell.date || !cell.dayNumber) {
-                  return <div key={`empty-${index}`} className="h-24 rounded-md border bg-muted/20" />
-                }
+                <div className="mt-1 grid grid-cols-7 gap-2">
+                  {calendarGrid.map((cell, index) => {
+                    if (!cell.date || !cell.dayNumber) {
+                      return (
+                        <div
+                          key={`empty-${index}`}
+                          className="h-24 rounded-md border bg-muted/20"
+                        />
+                      )
+                    }
 
-                if (cell.date > today) {
-                  return (
-                    <div
-                      key={cell.date}
-                      className="h-24 rounded-md border bg-muted/20"
-                    />
-                  )
-                }
+                    if (cell.date > today) {
+                      return (
+                        <div
+                          key={cell.date}
+                          className="h-24 rounded-md border bg-muted/20"
+                        />
+                      )
+                    }
 
-                const summary = calendarSummaries[cell.date]
-                const isSelected = cell.date === selectedDate
+                    const dayDate = cell.date
+                    const summary = calendarSummaries[dayDate]
+                    const isSelected = dayDate === selectedDate
 
-                return (
-                  <button
-                    key={cell.date}
-                    type="button"
-                    onClick={() => handleCalendarDaySelect(cell.date as string)}
-                    className={`h-24 rounded-md border p-2 text-left transition-colors hover:bg-muted/40 ${
-                      isSelected ? "border-primary bg-primary/5" : "bg-background"
-                    }`}
-                  >
-                    <p className="text-sm font-medium">{cell.dayNumber}</p>
-                    {summary ? (
-                      <div className="mt-1 text-xs text-muted-foreground">
-                        <p>{summary.count} task(s)</p>
-                        <p>
-                          {timeUnit === "hours"
-                            ? `${(summary.minutes / 60).toFixed(2)} h`
-                            : `${summary.minutes} min`}
-                        </p>
-                      </div>
-                    ) : null}
-                  </button>
-                )
-              })}
+                    return (
+                      <button
+                        key={dayDate}
+                        type="button"
+                        onClick={() => handleCalendarDaySelect(dayDate)}
+                        className={`h-24 rounded-md border p-2 text-left transition-colors hover:bg-muted/40 ${
+                          isSelected ? "border-primary bg-primary/5" : "bg-background"
+                        }`}
+                      >
+                        <p className="text-sm font-medium">{cell.dayNumber}</p>
+                        {summary ? (
+                          <div className="mt-1 text-xs text-muted-foreground">
+                            <p className="sm:hidden">{summary.count}t</p>
+                            <p className="hidden sm:block">{summary.count} task(s)</p>
+                            <p>
+                              {timeUnit === "hours"
+                                ? `${(summary.minutes / 60).toFixed(2)} h`
+                                : `${summary.minutes}m`}
+                            </p>
+                          </div>
+                        ) : null}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
             </div>
 
             {selectedDateSummary ? (
@@ -941,7 +1055,7 @@ export function HomePanel() {
       </Card>
 
       <Dialog open={Boolean(viewTask)} onOpenChange={(open) => !open && setViewTask(null)}>
-        <DialogContent>
+        <DialogContent className="max-h-[90svh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{viewTask?.title ?? "Task details"}</DialogTitle>
             <DialogDescription>
@@ -1015,7 +1129,7 @@ export function HomePanel() {
       </Dialog>
 
       <Dialog open={taskModalOpen} onOpenChange={setTaskModalOpen}>
-        <DialogContent>
+        <DialogContent className="max-h-[90svh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
               {taskModalMode === "create" ? "Create task" : "Edit task"}
@@ -1041,7 +1155,7 @@ export function HomePanel() {
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="modal-task-status">Status</Label>
                 <select

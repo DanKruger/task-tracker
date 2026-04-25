@@ -458,7 +458,7 @@ export function DashboardPanel() {
               <Fire className="size-5" />
               Contribution heatmap
             </CardTitle>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <Button
                 size="sm"
                 variant={heatMode === "count" ? "default" : "outline"}

@@ -171,6 +171,8 @@ function generateTaskId() {
 
 export function HomePanel() {
   const router = useRouter()
+  const today = todayIsoDate()
+  const currentMonth = today.slice(0, 7)
 
   const [user, setUser] = useState<User | null>(null)
   const [loadingAuth, setLoadingAuth] = useState(true)
@@ -442,12 +444,18 @@ export function HomePanel() {
   }
 
   function goToNextMonth() {
+    if (calendarMonth >= currentMonth) {
+      return
+    }
     const [yearRaw, monthRaw] = calendarMonth.split("-")
     const date = new Date(Number(yearRaw), Number(monthRaw), 1)
     setCalendarMonth(toIsoDate(date).slice(0, 7))
   }
 
   function handleCalendarDaySelect(date: string) {
+    if (date > today) {
+      return
+    }
     setSelectedDate(date)
     setViewMode("list")
     setStatusMessage(null)
@@ -455,6 +463,11 @@ export function HomePanel() {
 
   async function handleTaskModalSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+
+    if (selectedDate > today) {
+      setStatusMessage("You can only create tasks for today or past dates.")
+      return
+    }
 
     const trimmedTitle = taskForm.title.trim()
     const trimmedDescription = taskForm.description.trim()
@@ -639,9 +652,12 @@ export function HomePanel() {
                   type="date"
                   value={selectedDate}
                   onChange={(event) => {
-                    setSelectedDate(event.target.value)
-                    setCalendarMonth(event.target.value.slice(0, 7))
+                    const nextDate =
+                      event.target.value > today ? today : event.target.value
+                    setSelectedDate(nextDate)
+                    setCalendarMonth(nextDate.slice(0, 7))
                   }}
+                  max={today}
                   required
                 />
               </div>
@@ -803,7 +819,12 @@ export function HomePanel() {
                 Previous
               </Button>
               <p className="text-sm font-medium">{formatMonthLabel(calendarMonth)}</p>
-              <Button variant="outline" size="sm" onClick={goToNextMonth}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={goToNextMonth}
+                disabled={calendarMonth >= currentMonth}
+              >
                 Next
                 <CaretRight className="size-4" />
               </Button>
@@ -821,6 +842,15 @@ export function HomePanel() {
               {calendarGrid.map((cell, index) => {
                 if (!cell.date || !cell.dayNumber) {
                   return <div key={`empty-${index}`} className="h-24 rounded-md border bg-muted/20" />
+                }
+
+                if (cell.date > today) {
+                  return (
+                    <div
+                      key={cell.date}
+                      className="h-24 rounded-md border bg-muted/20"
+                    />
+                  )
                 }
 
                 const summary = calendarSummaries[cell.date]

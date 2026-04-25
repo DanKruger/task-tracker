@@ -5,6 +5,13 @@ import PptxGenJS from "pptxgenjs"
 import { onAuthStateChanged, signOut, type User } from "firebase/auth"
 import { doc, getDoc } from "firebase/firestore"
 import { useRouter } from "next/navigation"
+import {
+  CalendarBlank,
+  GearSix,
+  PresentationChart,
+  Slideshow,
+  TrendUp,
+} from "@phosphor-icons/react"
 
 import { AppShell } from "@/components/app-shell"
 import { Button } from "@/components/ui/button"
@@ -588,7 +595,10 @@ export function PresentationsPanel() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Sprint Presentations</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            <PresentationChart className="size-5" />
+            Sprint Presentations
+          </CardTitle>
           <CardDescription>
             Generate a downloadable slideshow for your sprint updates.
           </CardDescription>
@@ -625,6 +635,7 @@ export function PresentationsPanel() {
                 onClick={() => setSettingsOpen(true)}
                 className="w-full"
               >
+                <GearSix className="size-4" />
                 Deck settings
               </Button>
             </div>
@@ -636,6 +647,7 @@ export function PresentationsPanel() {
                 disabled={loadingData || generating || tasks.length === 0}
                 className="w-full"
               >
+                <Slideshow className="size-4" />
                 {generating ? "Generating..." : "Generate slide deck (.pptx)"}
               </Button>
             </div>
@@ -645,6 +657,7 @@ export function PresentationsPanel() {
             <div className="rounded-lg border p-4">
               <p className="text-sm text-muted-foreground">Range</p>
               <p className="mt-1 text-sm font-medium">
+                <CalendarBlank className="mr-1 inline size-4 align-text-bottom" />
                 {rangeDates[0]} to {rangeDates[rangeDates.length - 1]}
               </p>
             </div>
@@ -661,6 +674,7 @@ export function PresentationsPanel() {
             <div className="rounded-lg border p-4">
               <p className="text-sm text-muted-foreground">Done rate</p>
               <p className="mt-1 text-2xl font-semibold">{metrics.doneRate}%</p>
+              <TrendUp className="mt-1 size-4 text-muted-foreground" />
             </div>
           </div>
 

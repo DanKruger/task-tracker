@@ -4,6 +4,16 @@ import { useEffect, useMemo, useState } from "react"
 import { onAuthStateChanged, signOut, type User } from "firebase/auth"
 import { collection, getDocs } from "firebase/firestore"
 import { useRouter } from "next/navigation"
+import {
+  CalendarDots,
+  ChartBar,
+  CheckCircle,
+  Clock,
+  Fire,
+  Hash,
+  HourglassMedium,
+  TrendUp,
+} from "@phosphor-icons/react"
 
 import { AppShell } from "@/components/app-shell"
 import { Badge } from "@/components/ui/badge"
@@ -358,25 +368,37 @@ export function DashboardPanel() {
       <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <Card>
           <CardHeader className="pb-2">
-            <CardDescription>Total tasks</CardDescription>
+            <CardDescription className="flex items-center gap-1.5">
+              <Hash className="size-4" />
+              Total tasks
+            </CardDescription>
             <CardTitle className="text-2xl">{totalTasks}</CardTitle>
           </CardHeader>
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardDescription>{timeUnit === "hours" ? "Total hours" : "Total minutes"}</CardDescription>
+            <CardDescription className="flex items-center gap-1.5">
+              <Clock className="size-4" />
+              {timeUnit === "hours" ? "Total hours" : "Total minutes"}
+            </CardDescription>
             <CardTitle className="text-2xl">{formatDurationValue(totalMinutes, timeUnit)}</CardTitle>
           </CardHeader>
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardDescription>Average time per task</CardDescription>
+            <CardDescription className="flex items-center gap-1.5">
+              <HourglassMedium className="size-4" />
+              Average time per task
+            </CardDescription>
             <CardTitle className="text-2xl">{formatDuration(avgMinutes, timeUnit)}</CardTitle>
           </CardHeader>
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardDescription>Done rate</CardDescription>
+            <CardDescription className="flex items-center gap-1.5">
+              <TrendUp className="size-4" />
+              Done rate
+            </CardDescription>
             <CardTitle className="text-2xl">{doneRate}%</CardTitle>
           </CardHeader>
         </Card>
@@ -385,7 +407,10 @@ export function DashboardPanel() {
       <div className="mt-4 grid gap-4 lg:grid-cols-5">
         <Card className="lg:col-span-3">
           <CardHeader>
-            <CardTitle>Status distribution</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <ChartBar className="size-5" />
+              Status distribution
+            </CardTitle>
             <CardDescription>Across all tracked tasks.</CardDescription>
           </CardHeader>
           <CardContent>
@@ -408,7 +433,10 @@ export function DashboardPanel() {
 
         <Card className="lg:col-span-2">
           <CardHeader>
-            <CardTitle>Top active days</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <CalendarDots className="size-5" />
+              Top active days
+            </CardTitle>
             <CardDescription>Most recently active dates.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -441,13 +469,17 @@ export function DashboardPanel() {
       <div className="mt-4">
         <Card>
           <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <CardTitle>Contribution heatmap</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <Fire className="size-5" />
+              Contribution heatmap
+            </CardTitle>
             <div className="flex gap-2">
               <Button
                 size="sm"
                 variant={heatMode === "count" ? "default" : "outline"}
                 onClick={() => setHeatMode("count")}
               >
+                <Hash className="size-4" />
                 Task count
               </Button>
               <Button
@@ -455,6 +487,7 @@ export function DashboardPanel() {
                 variant={heatMode === "time" ? "default" : "outline"}
                 onClick={() => setHeatMode("time")}
               >
+                <Clock className="size-4" />
                 Time spent
               </Button>
             </div>
@@ -527,7 +560,10 @@ export function DashboardPanel() {
       <div className="mt-4 grid gap-4 xl:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle>Weekly report</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <TrendUp className="size-5" />
+              Weekly report
+            </CardTitle>
             <CardDescription>
               Last 8 weeks by total {timeUnit === "hours" ? "hours" : "minutes"}.
             </CardDescription>
@@ -558,7 +594,10 @@ export function DashboardPanel() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Monthly report</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <CheckCircle className="size-5" />
+              Monthly report
+            </CardTitle>
             <CardDescription>
               Last 6 months by total {timeUnit === "hours" ? "hours" : "minutes"}.
             </CardDescription>

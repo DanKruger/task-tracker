@@ -5,6 +5,16 @@ import { FirebaseError } from "firebase/app"
 import { onAuthStateChanged, signOut, type User } from "firebase/auth"
 import { deleteDoc, doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore"
 import { useRouter } from "next/navigation"
+import {
+  ArrowsClockwise,
+  CalendarBlank,
+  CaretLeft,
+  CaretRight,
+  ListBullets,
+  NotePencil,
+  Plus,
+  Trash,
+} from "@phosphor-icons/react"
 
 import { AppShell } from "@/components/app-shell"
 import { Badge } from "@/components/ui/badge"
@@ -601,6 +611,7 @@ export function HomePanel() {
                 variant={viewMode === "list" ? "default" : "outline"}
                 onClick={() => setViewMode("list")}
               >
+                <ListBullets className="size-4" />
                 List
               </Button>
               <Button
@@ -609,9 +620,11 @@ export function HomePanel() {
                 variant={viewMode === "calendar" ? "default" : "outline"}
                 onClick={() => setViewMode("calendar")}
               >
+                <CalendarBlank className="size-4" />
                 Calendar
               </Button>
               <Button type="button" onClick={openCreateTaskModal}>
+                <Plus className="size-4" />
                 New task
               </Button>
             </div>
@@ -746,6 +759,7 @@ export function HomePanel() {
                               variant="outline"
                               onClick={() => openEditTaskModal(task)}
                             >
+                              <NotePencil className="size-4" />
                               Edit
                             </Button>
                             <Button
@@ -753,6 +767,7 @@ export function HomePanel() {
                               variant="destructive"
                               onClick={() => void handleDeleteTask(task.id)}
                             >
+                              <Trash className="size-4" />
                               Delete
                             </Button>
                             <Button
@@ -769,6 +784,7 @@ export function HomePanel() {
                                 )
                               }
                             >
+                              <ArrowsClockwise className="size-4" />
                               Next status
                             </Button>
                           </div>
@@ -783,11 +799,13 @@ export function HomePanel() {
           <CardContent className="pt-6">
             <div className="mb-4 flex items-center justify-between">
               <Button variant="outline" size="sm" onClick={goToPreviousMonth}>
+                <CaretLeft className="size-4" />
                 Previous
               </Button>
               <p className="text-sm font-medium">{formatMonthLabel(calendarMonth)}</p>
               <Button variant="outline" size="sm" onClick={goToNextMonth}>
                 Next
+                <CaretRight className="size-4" />
               </Button>
             </div>
 
@@ -941,6 +959,7 @@ export function HomePanel() {
                 Cancel
               </Button>
               <Button type="submit" disabled={savingTask || loadingTasks}>
+                <Plus className="size-4" />
                 {savingTask
                   ? "Saving..."
                   : taskModalMode === "create"

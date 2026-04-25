@@ -3,6 +3,12 @@
 import { useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
+import {
+  ChartPieSlice,
+  House,
+  PresentationChart,
+  SignOut,
+} from "@phosphor-icons/react"
 
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -16,9 +22,9 @@ type AppShellProps = {
 }
 
 const navItems = [
-  { href: "/home", label: "Home" },
-  { href: "/dashboard", label: "Dashboard" },
-  { href: "/presentations", label: "Presentations" },
+  { href: "/home", label: "Home", icon: House },
+  { href: "/dashboard", label: "Dashboard", icon: ChartPieSlice },
+  { href: "/presentations", label: "Presentations", icon: PresentationChart },
 ]
 
 function initialsFromUser(name?: string | null, email?: string | null) {
@@ -73,12 +79,13 @@ export function AppShell({
                   key={item.href}
                   href={item.href}
                   className={cn(
-                    "block rounded-md px-3 py-2 text-sm transition-colors",
+                    "flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors",
                     isActive
                       ? "bg-primary text-primary-foreground"
                       : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
                   )}
                 >
+                  <item.icon className="size-4" weight="duotone" />
                   {item.label}
                 </Link>
               )
@@ -129,6 +136,7 @@ export function AppShell({
                     void onLogout()
                   }}
                 >
+                  <SignOut className="size-4" />
                   Logout
                 </Button>
               </div>

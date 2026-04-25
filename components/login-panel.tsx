@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { onAuthStateChanged, signInWithPopup, signInWithRedirect } from "firebase/auth"
+import { RocketLaunch } from "@phosphor-icons/react"
 import { FcGoogle } from "react-icons/fc"
 import { useRouter } from "next/navigation"
 
@@ -63,7 +64,10 @@ export function LoginPanel() {
           <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
             Welcome back
           </p>
-          <CardTitle className="text-2xl">Task Tracker</CardTitle>
+          <CardTitle className="flex items-center gap-2 text-2xl">
+            <RocketLaunch className="size-6" weight="duotone" />
+            Task Tracker
+          </CardTitle>
           <CardDescription>
             Sign in to view your tasks, dashboard metrics, and sprint presentations.
           </CardDescription>

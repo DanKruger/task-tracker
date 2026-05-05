@@ -499,8 +499,8 @@ export function HomePanel() {
     const parsedDurationInput = Number(taskForm.durationMinutes)
     const durationMinutesToSave =
       timeUnit === "hours"
-        ? Math.round(parsedDurationInput * 60)
-        : Math.round(parsedDurationInput)
+        ? parsedDurationInput * 60
+        : parsedDurationInput
 
     if (!trimmedTitle) {
       setStatusMessage("Task title is required.")
@@ -1204,8 +1204,7 @@ export function HomePanel() {
                 <Input
                   id="modal-task-duration"
                   type="number"
-                  min={timeUnit === "hours" ? 0.1 : 1}
-                  step={timeUnit === "hours" ? 0.25 : 1}
+                  step="any"
                   placeholder={timeUnit === "hours" ? "1.5" : "90"}
                   value={taskForm.durationMinutes}
                   onChange={(event) =>

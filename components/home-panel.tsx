@@ -121,11 +121,15 @@ function displayStatus(status: TaskStatus) {
   return statusOptions.find((option) => option.value === status)?.label ?? status
 }
 
-function normalizeTaskForm(task: TaskItem): TaskFormState {
+function normalizeTaskForm(task: TaskItem, timeUnit: "minutes" | "hours"): TaskFormState {
+  const durationValue =
+    timeUnit === "hours"
+      ? (task.durationMinutes / 60).toFixed(2)
+      : String(task.durationMinutes)
   return {
     title: task.title,
     status: task.status,
-    durationMinutes: String(task.durationMinutes),
+    durationMinutes: durationValue,
     description: task.description ?? "",
     link: task.link ?? "",
   }
@@ -442,7 +446,7 @@ export function HomePanel() {
   function openEditTaskModal(task: TaskItem) {
     setTaskModalMode("edit")
     setActiveTaskId(task.id)
-    setTaskForm(normalizeTaskForm(task))
+    setTaskForm(normalizeTaskForm(task, timeUnit))
     setStatusMessage(null)
     setTaskModalOpen(true)
   }
@@ -492,15 +496,28 @@ export function HomePanel() {
     const trimmedTitle = taskForm.title.trim()
     const trimmedDescription = taskForm.description.trim()
     const trimmedLink = taskForm.link.trim()
-    const parsedDuration = Number(taskForm.durationMinutes)
+    const parsedDurationInput = Number(taskForm.durationMinutes)
+    const durationMinutesToSave =
+      timeUnit === "hours"
+        ? Math.round(parsedDurationInput * 60)
+        : Math.round(parsedDurationInput)
 
     if (!trimmedTitle) {
       setStatusMessage("Task title is required.")
       return
     }
 
-    if (!Number.isFinite(parsedDuration) || parsedDuration <= 0) {
-      setStatusMessage("Time spent must be a positive number of minutes.")
+    if (!Number.isFinite(parsedDurationInput) || parsedDurationInput <= 0) {
+      setStatusMessage(
+        `Time spent must be a positive number of ${
+          timeUnit === "hours" ? "hours" : "minutes"
+        }.`
+      )
+      return
+    }
+
+    if (durationMinutesToSave <= 0) {
+      setStatusMessage("Time spent is too small after conversion.")
       return
     }
 
@@ -512,7 +529,7 @@ export function HomePanel() {
         id: generateTaskId(),
         title: trimmedTitle,
         status: taskForm.status,
-        durationMinutes: parsedDuration,
+        durationMinutes: durationMinutesToSave,
         createdAt: new Date().toISOString(),
         ...(trimmedDescription ? { description: trimmedDescription } : {}),
         ...(trimmedLink ? { link: trimmedLink } : {}),
@@ -545,7 +562,7 @@ export function HomePanel() {
               ...task,
               title: trimmedTitle,
               status: taskForm.status,
-              durationMinutes: parsedDuration,
+              durationMinutes: durationMinutesToSave,
             }
 
             if (trimmedDescription) {
@@ -1181,12 +1198,15 @@ export function HomePanel() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="modal-task-duration">Time spent (min)</Label>
+                <Label htmlFor="modal-task-duration">
+                  {timeUnit === "hours" ? "Time spent (hrs)" : "Time spent (min)"}
+                </Label>
                 <Input
                   id="modal-task-duration"
                   type="number"
-                  min={1}
-                  placeholder="90"
+                  min={timeUnit === "hours" ? 0.1 : 1}
+                  step={timeUnit === "hours" ? 0.25 : 1}
+                  placeholder={timeUnit === "hours" ? "1.5" : "90"}
                   value={taskForm.durationMinutes}
                   onChange={(event) =>
                     setTaskForm((prev) => ({

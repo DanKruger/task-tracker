@@ -1,6 +1,6 @@
 "use client"
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react"
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { FirebaseError } from "firebase/app"
 import { onAuthStateChanged, signOut, type User } from "firebase/auth"
 import { deleteDoc, doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore"
@@ -14,6 +14,7 @@ import {
   NotePencil,
   Plus,
   Trash,
+  UploadSimple,
 } from "@phosphor-icons/react"
 
 import { AppShell } from "@/components/app-shell"
@@ -59,6 +60,7 @@ type TaskDayDoc = {
 }
 
 type TaskFormState = {
+  date: string
   title: string
   status: TaskStatus
   durationMinutes: string
@@ -82,6 +84,17 @@ type CalendarDaySummary = {
   minutes: number
 }
 
+type CsvTaskRecord = {
+  date: string
+  id?: string
+  title: string
+  status: TaskStatus
+  durationMinutes: number
+  description?: string
+  link?: string
+  createdAt?: string
+}
+
 const statusOptions: Array<{ value: TaskStatus; label: string }> = [
   { value: "in_progress", label: "In progress" },
   { value: "testing", label: "Testing" },
@@ -98,6 +111,7 @@ const weekdayHeaders = [
 ]
 
 const emptyTaskForm: TaskFormState = {
+  date: "",
   title: "",
   status: "in_progress",
   durationMinutes: "",
@@ -121,12 +135,17 @@ function displayStatus(status: TaskStatus) {
   return statusOptions.find((option) => option.value === status)?.label ?? status
 }
 
-function normalizeTaskForm(task: TaskItem, timeUnit: "minutes" | "hours"): TaskFormState {
+function normalizeTaskForm(
+  task: TaskItem,
+  timeUnit: "minutes" | "hours",
+  date: string
+): TaskFormState {
   const durationValue =
     timeUnit === "hours"
       ? (task.durationMinutes / 60).toFixed(2)
       : String(task.durationMinutes)
   return {
+    date,
     title: task.title,
     status: task.status,
     durationMinutes: durationValue,
@@ -183,6 +202,113 @@ function generateTaskId() {
   return `task-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`
 }
 
+function parseCsvLine(line: string) {
+  const values: string[] = []
+  let current = ""
+  let inQuotes = false
+
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index]
+
+    if (char === '"') {
+      if (inQuotes && line[index + 1] === '"') {
+        current += '"'
+        index += 1
+      } else {
+        inQuotes = !inQuotes
+      }
+      continue
+    }
+
+    if (char === "," && !inQuotes) {
+      values.push(current.trim())
+      current = ""
+      continue
+    }
+
+    current += char
+  }
+
+  values.push(current.trim())
+  return values
+}
+
+function parseCsvTasks(csvText: string) {
+  const lines = csvText
+    .replace(/\r\n/g, "\n")
+    .replace(/\r/g, "\n")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+
+  if (lines.length < 2) {
+    throw new Error("CSV must include a header row and at least one task row.")
+  }
+
+  const headers = parseCsvLine(lines[0]).map((header) => header.trim())
+  const indexByHeader = new Map<string, number>()
+  headers.forEach((header, index) => {
+    indexByHeader.set(header, index)
+  })
+
+  const requiredHeaders = ["date", "title", "status", "durationMinutes"] as const
+  const missingHeaders = requiredHeaders.filter((header) => !indexByHeader.has(header))
+  if (missingHeaders.length > 0) {
+    throw new Error(`Missing required CSV header(s): ${missingHeaders.join(", ")}.`)
+  }
+
+  const nextTasks: CsvTaskRecord[] = []
+  for (let rowIndex = 1; rowIndex < lines.length; rowIndex += 1) {
+    const row = parseCsvLine(lines[rowIndex])
+    const lineNumber = rowIndex + 1
+
+    const dateRaw = row[indexByHeader.get("date") ?? -1]?.trim() ?? ""
+    const title = row[indexByHeader.get("title") ?? -1]?.trim() ?? ""
+    const statusRaw = row[indexByHeader.get("status") ?? -1]?.trim() ?? ""
+    const durationRaw = row[indexByHeader.get("durationMinutes") ?? -1]?.trim() ?? ""
+    const description = row[indexByHeader.get("description") ?? -1]?.trim() ?? ""
+    const link = row[indexByHeader.get("link") ?? -1]?.trim() ?? ""
+    const id = row[indexByHeader.get("id") ?? -1]?.trim() ?? ""
+    const createdAtRaw = row[indexByHeader.get("createdAt") ?? -1]?.trim() ?? ""
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateRaw)) {
+      throw new Error(`Row ${lineNumber}: date must be in YYYY-MM-DD format.`)
+    }
+
+    if (!title) {
+      throw new Error(`Row ${lineNumber}: title is required.`)
+    }
+
+    if (!["in_progress", "testing", "done"].includes(statusRaw)) {
+      throw new Error(
+        `Row ${lineNumber}: status must be one of in_progress, testing, done.`
+      )
+    }
+
+    const durationMinutes = Number(durationRaw)
+    if (!Number.isFinite(durationMinutes) || durationMinutes <= 0) {
+      throw new Error(`Row ${lineNumber}: durationMinutes must be a positive number.`)
+    }
+
+    if (createdAtRaw && Number.isNaN(new Date(createdAtRaw).getTime())) {
+      throw new Error(`Row ${lineNumber}: createdAt must be a valid ISO date-time.`)
+    }
+
+    nextTasks.push({
+      date: dateRaw,
+      ...(id ? { id } : {}),
+      title,
+      status: statusRaw as TaskStatus,
+      durationMinutes,
+      ...(description ? { description } : {}),
+      ...(link ? { link } : {}),
+      ...(createdAtRaw ? { createdAt: createdAtRaw } : {}),
+    })
+  }
+
+  return nextTasks
+}
+
 export function HomePanel() {
   const router = useRouter()
   const { timeUnit } = useUserSettings()
@@ -193,6 +319,7 @@ export function HomePanel() {
   const [loadingAuth, setLoadingAuth] = useState(true)
   const [loadingTasks, setLoadingTasks] = useState(false)
   const [savingTask, setSavingTask] = useState(false)
+  const [importingTasks, setImportingTasks] = useState(false)
   const [statusMessage, setStatusMessage] = useState<string | null>(null)
 
   const [selectedDate, setSelectedDate] = useState(todayIsoDate)
@@ -212,6 +339,7 @@ export function HomePanel() {
   const [taskForm, setTaskForm] = useState<TaskFormState>(emptyTaskForm)
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null)
   const [viewTask, setViewTask] = useState<TaskItem | null>(null)
+  const importFileInputRef = useRef<HTMLInputElement | null>(null)
 
   const selectedDateSummary = calendarSummaries[selectedDate]
 
@@ -406,11 +534,11 @@ export function HomePanel() {
     void loadCalendarMonthSummaries()
   }, [calendarMonth, user])
 
-  async function persistTasks(nextTasks: TaskItem[]) {
+  async function persistTasksForDate(date: string, nextTasks: TaskItem[]) {
     if (!user) return false
 
     try {
-      const dayRef = doc(db, "users", user.uid, "taskDays", selectedDate)
+      const dayRef = doc(db, "users", user.uid, "taskDays", date)
       if (nextTasks.length === 0) {
         await deleteDoc(dayRef)
         return true
@@ -418,7 +546,7 @@ export function HomePanel() {
       await setDoc(
         dayRef,
         {
-          date: selectedDate,
+          date,
           tasks: nextTasks,
           updatedAt: serverTimestamp(),
         },
@@ -435,10 +563,14 @@ export function HomePanel() {
     }
   }
 
+  async function persistTasks(nextTasks: TaskItem[]) {
+    return persistTasksForDate(selectedDate, nextTasks)
+  }
+
   function openCreateTaskModal() {
     setTaskModalMode("create")
     setActiveTaskId(null)
-    setTaskForm(emptyTaskForm)
+    setTaskForm({ ...emptyTaskForm, date: selectedDate })
     setStatusMessage(null)
     setTaskModalOpen(true)
   }
@@ -446,7 +578,7 @@ export function HomePanel() {
   function openEditTaskModal(task: TaskItem) {
     setTaskModalMode("edit")
     setActiveTaskId(task.id)
-    setTaskForm(normalizeTaskForm(task, timeUnit))
+    setTaskForm(normalizeTaskForm(task, timeUnit, selectedDate))
     setStatusMessage(null)
     setTaskModalOpen(true)
   }
@@ -454,7 +586,7 @@ export function HomePanel() {
   function closeTaskModal() {
     setTaskModalOpen(false)
     setActiveTaskId(null)
-    setTaskForm(emptyTaskForm)
+    setTaskForm({ ...emptyTaskForm, date: selectedDate })
   }
 
   function openTaskViewModal(task: TaskItem) {
@@ -496,11 +628,22 @@ export function HomePanel() {
     const trimmedTitle = taskForm.title.trim()
     const trimmedDescription = taskForm.description.trim()
     const trimmedLink = taskForm.link.trim()
+    const targetDate = taskForm.date
     const parsedDurationInput = Number(taskForm.durationMinutes)
     const durationMinutesToSave =
       timeUnit === "hours"
         ? parsedDurationInput * 60
         : parsedDurationInput
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(targetDate)) {
+      setStatusMessage("Task date must be in YYYY-MM-DD format.")
+      return
+    }
+
+    if (targetDate > today) {
+      setStatusMessage("You can only save tasks for today or past dates.")
+      return
+    }
 
     if (!trimmedTitle) {
       setStatusMessage("Task title is required.")
@@ -582,19 +725,77 @@ export function HomePanel() {
         : task
     )
 
-    setTasks(nextTasks)
-    syncCalendarSummaryForDate(selectedDate, nextTasks)
-    const saved = await persistTasks(nextTasks)
+    if (targetDate === selectedDate) {
+      setTasks(nextTasks)
+      syncCalendarSummaryForDate(selectedDate, nextTasks)
+      const saved = await persistTasks(nextTasks)
 
-    if (!saved) {
-      setTasks(tasks)
-      syncCalendarSummaryForDate(selectedDate, tasks)
+      if (!saved) {
+        setTasks(tasks)
+        syncCalendarSummaryForDate(selectedDate, tasks)
+        setSavingTask(false)
+        return
+      }
+
+      closeTaskModal()
+      setStatusMessage("Task updated.")
       setSavingTask(false)
       return
     }
 
+    const movedTask = nextTasks.find((task) => task.id === activeTaskId)
+    if (!movedTask) {
+      setSavingTask(false)
+      setStatusMessage("No task selected for edit.")
+      return
+    }
+    if (!user) {
+      setSavingTask(false)
+      setStatusMessage("You must be signed in to edit tasks.")
+      return
+    }
+
+    const sourceTasks = nextTasks.filter((task) => task.id !== activeTaskId)
+
+    const targetDayRef = doc(db, "users", user.uid, "taskDays", targetDate)
+    let targetDayTasks: TaskItem[] = []
+    try {
+      const targetSnapshot = await getDoc(targetDayRef)
+      if (targetSnapshot.exists()) {
+        const targetData = targetSnapshot.data() as Partial<TaskDayDoc>
+        targetDayTasks = Array.isArray(targetData.tasks) ? targetData.tasks : []
+      }
+    } catch {
+      setSavingTask(false)
+      setStatusMessage("Failed to load target date tasks.")
+      return
+    }
+
+    const mergedTargetTasks = [movedTask, ...targetDayTasks]
+
+    setTasks(sourceTasks)
+    syncCalendarSummaryForDate(selectedDate, sourceTasks)
+    syncCalendarSummaryForDate(targetDate, mergedTargetTasks)
+
+    const [sourceSaved, targetSaved] = await Promise.all([
+      persistTasksForDate(selectedDate, sourceTasks),
+      persistTasksForDate(targetDate, mergedTargetTasks),
+    ])
+
+    if (!sourceSaved || !targetSaved) {
+      setTasks(tasks)
+      syncCalendarSummaryForDate(selectedDate, tasks)
+      setSavingTask(false)
+      setStatusMessage("Failed to move task to the selected date.")
+      return
+    }
+
+    if (selectedDate === targetDate) {
+      setTasks(mergedTargetTasks)
+    }
+
     closeTaskModal()
-    setStatusMessage("Task updated.")
+    setStatusMessage(`Task moved to ${targetDate}.`)
     setSavingTask(false)
   }
 
@@ -641,6 +842,105 @@ export function HomePanel() {
       router.replace("/login")
     } catch {
       setStatusMessage("Sign-out failed.")
+    }
+  }
+
+  async function handleImportTasksFile(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    event.target.value = ""
+
+    if (!file) return
+    setImportingTasks(true)
+    setStatusMessage(null)
+
+    try {
+      const text = await file.text()
+      const parsedTasks = parseCsvTasks(text)
+      const futureDatedTask = parsedTasks.find((task) => task.date > today)
+      if (futureDatedTask) {
+        setStatusMessage(
+          `Import failed: date ${futureDatedTask.date} is in the future.`
+        )
+        setImportingTasks(false)
+        return
+      }
+
+      const groupedByDate = parsedTasks.reduce<Record<string, CsvTaskRecord[]>>(
+        (acc, task) => {
+          if (!acc[task.date]) {
+            acc[task.date] = []
+          }
+          acc[task.date].push(task)
+          return acc
+        },
+        {}
+      )
+
+      const importDates = Object.keys(groupedByDate)
+      const daySnapshots = await Promise.all(
+        importDates.map(async (date) => {
+          const dayRef = doc(db, "users", user!.uid, "taskDays", date)
+          const snapshot = await getDoc(dayRef)
+          return { date, snapshot }
+        })
+      )
+
+      const mergedByDate: Record<string, TaskItem[]> = {}
+      for (const { date, snapshot } of daySnapshots) {
+        const existingTasks = snapshot.exists()
+          ? (((snapshot.data() as Partial<TaskDayDoc>).tasks ?? []) as TaskItem[])
+          : []
+        const existingIds = new Set(existingTasks.map((task) => task.id))
+        const importedForDate: TaskItem[] = groupedByDate[date].map((row) => {
+          let nextId = row.id?.trim() || generateTaskId()
+          while (existingIds.has(nextId)) {
+            nextId = generateTaskId()
+          }
+          existingIds.add(nextId)
+
+          return {
+            id: nextId,
+            title: row.title.trim(),
+            status: row.status,
+            durationMinutes: row.durationMinutes,
+            createdAt: row.createdAt ?? new Date().toISOString(),
+            ...(row.description ? { description: row.description.trim() } : {}),
+            ...(row.link ? { link: row.link.trim() } : {}),
+          }
+        })
+
+        mergedByDate[date] = [...importedForDate, ...existingTasks]
+      }
+
+      const saveResults = await Promise.all(
+        Object.entries(mergedByDate).map(([date, dayTasks]) =>
+          persistTasksForDate(date, dayTasks)
+        )
+      )
+      if (saveResults.some((saved) => !saved)) {
+        setImportingTasks(false)
+        return
+      }
+
+      if (mergedByDate[selectedDate]) {
+        setTasks(mergedByDate[selectedDate])
+      }
+
+      Object.entries(mergedByDate).forEach(([date, dayTasks]) => {
+        syncCalendarSummaryForDate(date, dayTasks)
+      })
+
+      setStatusMessage(
+        `Imported ${parsedTasks.length} task(s) across ${importDates.length} date(s).`
+      )
+    } catch (error) {
+      if (error instanceof Error) {
+        setStatusMessage(`Import failed: ${error.message}`)
+      } else {
+        setStatusMessage("Import failed due to an unknown CSV parsing error.")
+      }
+    } finally {
+      setImportingTasks(false)
     }
   }
 
@@ -694,6 +994,22 @@ export function HomePanel() {
                 <Plus className="size-4" />
                 New task
               </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => importFileInputRef.current?.click()}
+                disabled={importingTasks || loadingTasks}
+              >
+                <UploadSimple className="size-4" />
+                {importingTasks ? "Importing..." : "Import CSV"}
+              </Button>
+              <Input
+                ref={importFileInputRef}
+                type="file"
+                accept=".csv,text/csv"
+                className="hidden"
+                onChange={(event) => void handleImportTasksFile(event)}
+              />
             </div>
           </div>
 
@@ -1162,6 +1478,22 @@ export function HomePanel() {
           </DialogHeader>
 
           <form className="grid gap-4" onSubmit={handleTaskModalSubmit}>
+            {taskModalMode === "edit" ? (
+              <div className="space-y-2">
+                <Label htmlFor="modal-task-date">Task date</Label>
+                <Input
+                  id="modal-task-date"
+                  type="date"
+                  value={taskForm.date}
+                  onChange={(event) =>
+                    setTaskForm((prev) => ({ ...prev, date: event.target.value }))
+                  }
+                  max={today}
+                  required
+                />
+              </div>
+            ) : null}
+
             <div className="space-y-2">
               <Label htmlFor="modal-task-title">Task title</Label>
               <Input
